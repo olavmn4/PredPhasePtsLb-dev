@@ -1091,20 +1091,60 @@ function calcQualLikelihood(row) {
   const PLAYOFFS_TARGET = 159;
   const currentPP = row.currentPP ?? 0;
   const eloRk     = row.eloRk ?? 999;
+  const eloRate   = row.eloRate ?? 0;
+  const uuid      = row.uuid;
+  const now       = Math.floor(Date.now() / 1000);
 
   const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
 
-  // Mathematically eliminated?
   const bestCasePP = currentPP + p3Pts(1) + p4Pts(1);
   if (bestCasePP < PLAYOFFS_TARGET) {
     return { pct: 0, label: 'eliminated', color: '#6b7280', lines: ['cannot reach 159 pts even at rank 1 both phases'] };
   }
 
-  // Realistic total: hold current Elo rank for both remaining phases
-  const realisticPP = currentPP + p3Pts(eloRk) + p4Pts(eloRk);
+  // ── 7-day average Elo rank from snapshots ────────────────────────────────
+  const hist = tsHistory[uuid] ?? [];
+  const recent = hist.filter(p => p.t >= now - 7*24*3600);
+
+  let avgEloRank = eloRk; // default to current if no history
+  let avgEloRate = eloRate;
+  if (recent.length >= 2) {
+    // Use eloRate from snapshots to compute average rank
+    // eloByRank maps rank→rate, so invert: find rank where rate matches
+    const rates = recent.map(p => p.eloRate).filter(Boolean);
+    if (rates.length) {
+      avgEloRate = Math.round(rates.reduce((a, b) => a + b, 0) / rates.length);
+      // Find the rank corresponding to avgEloRate in current eloByRank
+      let closestRank = eloRk;
+      let closestDiff = Infinity;
+      for (const [r, rate] of Object.entries(eloByRank)) {
+        const diff = Math.abs(rate - avgEloRate);
+        if (diff < closestDiff) { closestDiff = diff; closestRank = parseInt(r); }
+      }
+      avgEloRank = closestRank;
+    }
+  }
+
+  const rankDiff = avgEloRank - eloRk; // positive = currently better than average
+  const isOverperforming  = rankDiff >= 5;  // currently ranked much better than avg
+  const isUnderperforming = rankDiff <= -5; // currently ranked much worse than avg
+
+  // P3: use current rank (phase is ongoing, limited time to change)
+  // P4: use 7-day average rank — more honest in a volatile system
+  const p3RkUsed = eloRk;
+  const p4RkUsed = Math.min(100, avgEloRank);
+
+  const realisticPP = currentPP + p3Pts(p3RkUsed) + p4Pts(p4RkUsed);
   const buffer = realisticPP - PLAYOFFS_TARGET;
-  const lines = [`projected ${realisticPP} pts holding elo rank ${eloRk} (target: ${PLAYOFFS_TARGET})`];
+
+  const lines = [];
+  if (recent.length >= 2 && avgEloRank !== eloRk) {
+    lines.push(`P3 rank: ${eloRk} (current) · P4 rank: ${p4RkUsed} (7-day avg)`);
+  } else {
+    lines.push(`P3 rank: ${eloRk} · P4 rank: ${p4RkUsed}`);
+  }
+  lines.push(`projected ${realisticPP} pts (target: ${PLAYOFFS_TARGET})`);
 
   let pct;
   if (buffer >= 60)        pct = 97.0;
@@ -1128,15 +1168,22 @@ function calcQualLikelihood(row) {
     lines.push(`+${buffer} pts buffer above target`);
   } else {
     lines.push(`${buffer} pts short — needs to improve Elo rank`);
-    // Show what rank they'd need to hold in P4 to still qualify given P3 at current rank
-    const afterP3 = currentPP + p3Pts(eloRk);
+    const afterP3 = currentPP + p3Pts(p3RkUsed);
     const neededP4 = PLAYOFFS_TARGET - afterP3;
     for (let r = 100; r >= 1; r--) {
-      if (p4Pts(r) >= neededP4) {
-        lines.push(`need P4 rank ≤${r} (currently ${eloRk})`);
-        break;
-      }
+      if (p4Pts(r) >= neededP4) { lines.push(`need P4 rank ≤${r}`); break; }
     }
+  }
+
+  // Overperforming/underperforming modifier
+  if (isOverperforming) {
+    const penalty = Math.min(15, Math.round(rankDiff * 0.8));
+    pct = Math.max(0.1, pct - penalty);
+    lines.push(`⚠ currently ${rankDiff} ranks better than 7-day avg (elo ${eloRate} vs avg ${avgEloRate}) — regression risk`);
+  } else if (isUnderperforming) {
+    const bonus = Math.min(10, Math.round(Math.abs(rankDiff) * 0.5));
+    pct = Math.min(97, pct + bonus);
+    lines.push(`↑ currently ${Math.abs(rankDiff)} ranks below 7-day avg (elo ${eloRate} vs avg ${avgEloRate}) — likely to recover`);
   }
 
   pct = Math.min(97, Math.max(0.1, pct));
@@ -1145,6 +1192,7 @@ function calcQualLikelihood(row) {
 
   return { pct, label, color, lines };
 }
+
 let qualScoreCache = {}; // uuid → normalized pct (sums to 1200 across all players)
 
 function buildQualScores() {
