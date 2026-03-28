@@ -1205,34 +1205,11 @@ function calcQualLikelihood(row) {
 let qualScoreCache = {}; // uuid → normalized pct (sums to 1200 across all players)
 
 function buildQualScores() {
-  const raw = {};
-  for (const u of mergedData) {
-    const result = calcQualLikelihood(u);
-    raw[u.uuid] = result ? Math.max(0.1, result.pct) : 0.1;
-  }
-
-  // Only normalize across players who can realistically qualify
-  // (those whose best case PP >= 159, i.e. not mathematically eliminated)
-  const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
-  const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
-  const PLAYOFFS_TARGET = 159;
-
-  const eligible = mergedData.filter(u => {
-    const best = (u.currentPP ?? 0) + p3Pts(1) + p4Pts(1);
-    return best >= PLAYOFFS_TARGET;
-  });
-
-  const eligibleTotal = eligible.reduce((a, u) => a + raw[u.uuid], 0);
-  const scale = eligibleTotal > 0 ? 1200 / eligibleTotal : 1;
-
+  // No normalization — just cache raw scores capped at 97%
   qualScoreCache = {};
   for (const u of mergedData) {
-    const isEligible = eligible.find(e => e.uuid === u.uuid);
-    if (isEligible) {
-      qualScoreCache[u.uuid] = Math.round(raw[u.uuid] * scale * 10) / 10;
-    } else {
-      qualScoreCache[u.uuid] = 0; // mathematically eliminated
-    }
+    const result = calcQualLikelihood(u);
+    qualScoreCache[u.uuid] = result ? result.pct : 0;
   }
 }
 
@@ -1260,7 +1237,7 @@ function renderQualLikelihood(row) {
     <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);line-height:1.9">
       ${lines.map(l => `<div>${l}</div>`).join('')}
     </div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">normalized across all players · 12 playoff spots · target ~159 pts</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">based on projected decay floor · target ~159 pts · ~5 elo/day decay assumed</div>
   `;
 }
 
