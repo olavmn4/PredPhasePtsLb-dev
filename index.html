@@ -906,7 +906,7 @@ let tsHistory = {};
 
 async function loadServerHistory() {
   try {
-    const r = await fetch(`https://olavmn4.github.io/PredPhasePtsLb/history.json?t=${Date.now()}`);
+    const r = await fetch(`/PredPhasePtsLb/history.json?t=${Date.now()}`);
     const data = await r.json();
     if (Array.isArray(data)) {
       serverSnapshots = data;
@@ -1085,94 +1085,113 @@ function calcQualLikelihood(row) {
   if (!row) return null;
 
   const PLAYOFFS_TARGET = 159;
-  const predPP   = row.predPP   ?? 0;
-  const currentPP = row.currentPP ?? 0;
-  const eloRk    = row.eloRk    ?? 999;
-  const ppRk     = row.ppRk     ?? 999;
-  const qualType = row.qualData?.type;
-  const qualGap  = row.qualData?.gap;
+  const DECAY_PER_DAY   = 5;
+  const ELO_PER_RANK    = 10; // approximate elo between adjacent ranks
+
+  const currentPP  = row.currentPP  ?? 0;
+  const predPP     = row.predPP     ?? 0;
+  const eloRk      = row.eloRk      ?? 999;
+  const eloRate    = row.eloRate     ?? 0;
+  const uuid       = row.uuid;
 
   const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
 
-  const maxP3Gain = p3Pts(1);
-  const maxP4Gain = p4Pts(1);
-  const maxPossiblePP = currentPP + maxP3Gain + maxP4Gain;
+  // Days remaining in P3 (use phaseEndsAt if available, else assume 14 days)
+  const now = Math.floor(Date.now() / 1000);
+  const p3DaysLeft = phaseEndsAt
+    ? Math.max(0, (phaseEndsAt - now) / 86400)
+    : 14;
 
-  // ── Factor 1: reachability (0-40 pts) ──────────────────────────────────
-  // Can they mathematically reach 159? How easily?
-  let reachScore = 0;
-  if (predPP >= PLAYOFFS_TARGET) {
-    reachScore = 40; // already on track with current P3 pred
-  } else if (maxPossiblePP >= PLAYOFFS_TARGET) {
-    // How much buffer do they have?
-    const needed = PLAYOFFS_TARGET - currentPP;
-    const available = maxP3Gain + maxP4Gain;
-    const ratio = Math.min(1, (available - needed + maxP3Gain * 0.3) / available);
-    reachScore = Math.round(ratio * 35);
-  } else {
-    reachScore = 0; // mathematically impossible
+  // P4 is always one full phase (~30 days), assume full decay exposure
+  const p4DaysLeft = 30;
+
+  // ── Worst-case scenario: player only decays from here ──────────────────
+  // How much elo do they lose if they play zero games?
+  const p3EloDecay = p3DaysLeft * DECAY_PER_DAY;
+  const p4EloDecay = p4DaysLeft * DECAY_PER_DAY;
+
+  // What Elo rank would they be at if they only decay?
+  // Approximate: each rank gap is roughly ELO_PER_RANK elo
+  const p3WorstEloRk = Math.min(100, Math.round(eloRk + p3EloDecay / ELO_PER_RANK));
+  const p4WorstEloRk = Math.min(100, Math.round(eloRk + (p3EloDecay + p4EloDecay) / ELO_PER_RANK));
+
+  const p3WorstPts = p3Pts(p3WorstEloRk);
+  const p4WorstPts = p4Pts(p4WorstEloRk);
+  const worstCasePP = currentPP + p3WorstPts + p4WorstPts;
+
+  // Best case: they peak at rank 1 both phases
+  const bestCasePP = currentPP + p3Pts(1) + p4Pts(1);
+
+  // ── Mathematically impossible ───────────────────────────────────────────
+  if (bestCasePP < PLAYOFFS_TARGET) {
+    return { pct: 0, label: 'eliminated', color: '#6b7280', factors: null };
   }
 
-  // ── Factor 2: current position (0-25 pts) ──────────────────────────────
-  let posScore = 0;
-  if (ppRk <= 12)       posScore = 25; // in playoffs
-  else if (ppRk <= 20)  posScore = 20;
-  else if (ppRk <= 35)  posScore = 14;
-  else if (ppRk <= 60)  posScore = 8;
-  else if (ppRk <= 100) posScore = 4;
-  else                  posScore = 1;
+  // ── Core score: how much buffer do they have on worst-case decay? ───────
+  // If worstCasePP >= 159, they qualify even without playing another game
+  // Scale between 0 (need rank 1 both phases) and 95 (qualify with pure decay)
+  let pct;
+  const factors = {};
 
-  // ── Factor 3: Elo rank trajectory from history (0-20 pts) ──────────────
-  let trendScore = 10; // neutral default
-  const uuid = row.uuid;
+  if (worstCasePP >= PLAYOFFS_TARGET) {
+    // Qualifies with pure decay — very safe. How much buffer?
+    const buffer = worstCasePP - PLAYOFFS_TARGET;
+    pct = Math.min(97, 80 + Math.round(buffer * 0.5));
+    factors.base = 'qualifies without playing';
+    factors.worstCasePP = worstCasePP;
+    factors.buffer = `+${buffer} pts buffer`;
+  } else {
+    // Needs to play. How much extra PP do they need beyond decay?
+    const shortfall = PLAYOFFS_TARGET - worstCasePP;
+    const totalAvailable = bestCasePP - worstCasePP;
+
+    // ratio: 1 = needs almost nothing extra, 0 = needs everything to go perfectly
+    const ratio = Math.max(0, 1 - shortfall / totalAvailable);
+
+    // Base score 5-75 depending on how achievable the shortfall is
+    pct = Math.round(5 + ratio * 70);
+
+    factors.base = 'needs to play';
+    factors.worstCasePP = worstCasePP;
+    factors.shortfall = `needs +${shortfall} pts beyond decay floor`;
+    factors.worstEloRanks = `decay floor: P3 rank ~${p3WorstEloRk}, P4 rank ~${p4WorstEloRk}`;
+  }
+
+  // ── Modifier: recent rank trend ─────────────────────────────────────────
   const hist = tsHistory[uuid] ?? [];
-  if (hist.length >= 2) {
-    const recent = hist.filter(p => p.t >= Math.floor(Date.now()/1000) - 7*24*3600);
-    if (recent.length >= 2) {
-      const oldest = recent[0];
-      const newest = recent[recent.length - 1];
-      const rankDelta = oldest.ppRk - newest.ppRk; // positive = moved up
-      if      (rankDelta >= 5)  trendScore = 20;
-      else if (rankDelta >= 2)  trendScore = 16;
-      else if (rankDelta >= 0)  trendScore = 12;
-      else if (rankDelta >= -3) trendScore = 7;
-      else                      trendScore = 3;
+  const recent = hist.filter(p => p.t >= now - 7*24*3600);
+  if (recent.length >= 2) {
+    const rankDelta = recent[0].ppRk - recent[recent.length-1].ppRk;
+    if      (rankDelta >= 5)  pct = Math.min(97, pct + 5);
+    else if (rankDelta >= 2)  pct = Math.min(97, pct + 2);
+    else if (rankDelta <= -5) pct = Math.max(1,  pct - 5);
+    else if (rankDelta <= -2) pct = Math.max(1,  pct - 2);
+    factors.trend = rankDelta >= 0 ? `↑ gained ${rankDelta} PP ranks this week` : `↓ lost ${Math.abs(rankDelta)} PP ranks this week`;
+  }
+
+  // ── Modifier: activity (inactive players won't improve) ─────────────────
+  if (row.lastPlayed) {
+    const daysInactive = (now - row.lastPlayed) / 86400;
+    if (daysInactive > 14 && worstCasePP < PLAYOFFS_TARGET) {
+      pct = Math.max(1, pct - 15);
+      factors.activity = `inactive ${Math.round(daysInactive)}d — decay risk`;
+    } else if (daysInactive < 1) {
+      factors.activity = 'active today';
     }
   }
 
-  // ── Factor 4: Elo rank (proxy for skill ceiling) (0-10 pts) ────────────
-  let eloScore = 0;
-  if      (eloRk <= 5)   eloScore = 10;
-  else if (eloRk <= 15)  eloScore = 8;
-  else if (eloRk <= 30)  eloScore = 6;
-  else if (eloRk <= 60)  eloScore = 4;
-  else if (eloRk <= 100) eloScore = 2;
-  else                   eloScore = 1;
+  pct = Math.min(97, Math.max(1, pct));
 
-  // ── Factor 5: activity (0-5 pts) ───────────────────────────────────────
-  let activityScore = 3; // default neutral
-  const lastPlayed = row.lastPlayed;
-  if (lastPlayed) {
-    const hoursAgo = (Date.now()/1000 - lastPlayed) / 3600;
-    if      (hoursAgo < 6)   activityScore = 5;
-    else if (hoursAgo < 24)  activityScore = 4;
-    else if (hoursAgo < 72)  activityScore = 3;
-    else if (hoursAgo < 168) activityScore = 2;
-    else                     activityScore = 1;
-  }
+  const label = pct >= 85 ? 'very likely'
+    : pct >= 65 ? 'likely'
+    : pct >= 40 ? 'possible'
+    : pct >= 15 ? 'unlikely'
+    : 'very unlikely';
 
-  // ── Combine ─────────────────────────────────────────────────────────────
-  const raw = reachScore + posScore + trendScore + eloScore + activityScore;
-  const pct = Math.min(99, Math.max(1, Math.round(raw)));
+  const color = pct >= 65 ? 'var(--accent)' : pct >= 35 ? '#fbbf24' : '#f87171';
 
-  // Override: mathematically impossible
-  if (maxPossiblePP < PLAYOFFS_TARGET) return { pct: 0, factors: { reachScore, posScore, trendScore, eloScore, activityScore } };
-
-  return {
-    pct,
-    factors: { reachScore, posScore, trendScore, eloScore, activityScore },
-  };
+  return { pct, label, color, factors };
 }
 
 function renderQualLikelihood(row) {
@@ -1181,9 +1200,11 @@ function renderQualLikelihood(row) {
   const result = calcQualLikelihood(row);
   if (!result) { el.style.display = 'none'; return; }
 
-  const { pct, factors } = result;
-  const color = pct >= 70 ? 'var(--accent)' : pct >= 40 ? '#fbbf24' : '#f87171';
-  const label = pct >= 85 ? 'very likely' : pct >= 65 ? 'likely' : pct >= 40 ? 'possible' : pct >= 15 ? 'unlikely' : pct === 0 ? 'eliminated' : 'very unlikely';
+  const { pct, label, color, factors } = result;
+
+  const factorLines = factors ? Object.entries(factors).map(([k, v]) =>
+    `<div style="margin-top:3px">${v}</div>`
+  ).join('') : '';
 
   el.style.display = 'block';
   el.innerHTML = `
@@ -1192,17 +1213,13 @@ function renderQualLikelihood(row) {
       <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:700;color:${color}">${pct}%</div>
       <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${label}</div>
     </div>
-    <div style="background:var(--bg3);height:4px;border-radius:0;margin-bottom:12px;overflow:hidden">
+    <div style="background:var(--bg3);height:4px;margin-bottom:12px;overflow:hidden">
       <div style="height:100%;width:${pct}%;background:${color};transition:width .4s"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">
-      <div>reachability <span style="float:right;color:var(--text)">${factors.reachScore}/40</span></div>
-      <div>current rank <span style="float:right;color:var(--text)">${factors.posScore}/25</span></div>
-      <div>rank trend <span style="float:right;color:var(--text)">${factors.trendScore}/20</span></div>
-      <div>elo rank <span style="float:right;color:var(--text)">${factors.eloScore}/10</span></div>
-      <div>activity <span style="float:right;color:var(--text)">${factors.activityScore}/5</span></div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);line-height:1.7">
+      ${factorLines}
     </div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.6">estimate based on current trajectory · target ~159 pts</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">based on decay floor · target ~159 pts · ~5 elo/day decay assumed</div>
   `;
 }
 
