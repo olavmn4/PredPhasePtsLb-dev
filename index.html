@@ -671,6 +671,8 @@ function buildMerged() {
     const preRank = preRankMap[u.uuid] ?? u.ppRk;
     u.phaseMove = preRank - u.ppRk; // positive = moved up, negative = moved down
   });
+
+  buildQualScores();
 }
 
 function phaseMoveCell(v) {
@@ -1200,28 +1202,47 @@ function calcQualLikelihood(row) {
   return { pct, label, color, lines };
 }
 
+let qualScoreCache = {}; // uuid → normalized pct (sums to 1200 across all players)
+
+function buildQualScores() {
+  const raw = {};
+  for (const u of mergedData) {
+    const result = calcQualLikelihood(u);
+    raw[u.uuid] = result ? Math.max(0.1, result.pct) : 0.1;
+  }
+  const total = Object.values(raw).reduce((a, b) => a + b, 0);
+  const scale = total > 0 ? 1200 / total : 1;
+  qualScoreCache = {};
+  for (const [uuid, score] of Object.entries(raw)) {
+    qualScoreCache[uuid] = Math.round(score * scale * 10) / 10; // 1dp
+  }
+}
+
 function renderQualLikelihood(row) {
   const el = document.getElementById('modal-qual-likelihood');
   if (!el) return;
   const result = calcQualLikelihood(row);
   if (!result) { el.style.display = 'none'; return; }
 
-  const { pct, label, color, lines } = result;
+  const pct = qualScoreCache[row?.uuid] ?? result.pct;
+  const nLabel = pct >= 85 ? 'very likely' : pct >= 65 ? 'likely' : pct >= 40 ? 'possible' : pct >= 15 ? 'unlikely' : pct < 2 ? 'eliminated' : 'very unlikely';
+  const nColor = pct >= 65 ? 'var(--accent)' : pct >= 35 ? '#fbbf24' : '#f87171';
+  const { lines } = result;
 
   el.style.display = 'block';
   el.innerHTML = `
     <div class="qual-path-label">playoffs qualification likelihood</div>
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:700;color:${color}">${pct}%</div>
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${label}</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:700;color:${nColor}">${pct}%</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${nLabel}</div>
     </div>
     <div style="background:var(--bg3);height:4px;margin-bottom:12px;overflow:hidden">
-      <div style="height:100%;width:${pct}%;background:${color};transition:width .4s"></div>
+      <div style="height:100%;width:${Math.min(100, pct)}%;background:${nColor};transition:width .4s"></div>
     </div>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);line-height:1.9">
       ${lines.map(l => `<div>${l}</div>`).join('')}
     </div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">based on decay floor · target ~159 pts · ~5 elo/day decay assumed</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">normalized across all players · 12 playoff spots · target ~159 pts</div>
   `;
 }
 
