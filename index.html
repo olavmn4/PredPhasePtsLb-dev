@@ -1153,17 +1153,17 @@ function calcQualLikelihood(row) {
   const lines = [];
 
   if (projectedPP >= PLAYOFFS_TARGET) {
-    // On track — how much buffer?
     const buffer = projectedPP - PLAYOFFS_TARGET;
-    if (buffer >= 30)      pct = 95;
-    else if (buffer >= 15) pct = 88;
-    else if (buffer >= 5)  pct = 80;
-    else                   pct = 72;
-    lines.push(`projected ~${projectedPP} pts — on track (${buffer > 0 ? '+' : ''}${buffer} buffer)`);
+    if (buffer >= 40)      pct = 98;
+    else if (buffer >= 20) pct = 95;
+    else if (buffer >= 10) pct = 90;
+    else if (buffer >= 3)  pct = 82;
+    else                   pct = 74;
+    lines.push(`projected ~${projectedPP} pts — on track (+${buffer} buffer)`);
   } else {
-    // Not on track — how big is the gap?
-    // Scale: gap of 5 = ~55%, gap of 20 = ~25%, gap of 40+ = ~5%
-    pct = Math.max(3, Math.round(60 * Math.exp(-gap / 15)));
+    const gap = PLAYOFFS_TARGET - projectedPP;
+    // Very steep drop-off — gap of 5 = ~35%, gap of 15 = ~12%, gap of 30+ = ~3%
+    pct = Math.max(2, Math.round(40 * Math.exp(-gap / 8)));
     lines.push(`projected ~${projectedPP} pts — needs +${gap} more to qualify`);
   }
 
@@ -1210,11 +1210,29 @@ function buildQualScores() {
     const result = calcQualLikelihood(u);
     raw[u.uuid] = result ? Math.max(0.1, result.pct) : 0.1;
   }
-  const total = Object.values(raw).reduce((a, b) => a + b, 0);
-  const scale = total > 0 ? 1200 / total : 1;
+
+  // Only normalize across players who can realistically qualify
+  // (those whose best case PP >= 159, i.e. not mathematically eliminated)
+  const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+  const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+  const PLAYOFFS_TARGET = 159;
+
+  const eligible = mergedData.filter(u => {
+    const best = (u.currentPP ?? 0) + p3Pts(1) + p4Pts(1);
+    return best >= PLAYOFFS_TARGET;
+  });
+
+  const eligibleTotal = eligible.reduce((a, u) => a + raw[u.uuid], 0);
+  const scale = eligibleTotal > 0 ? 1200 / eligibleTotal : 1;
+
   qualScoreCache = {};
-  for (const [uuid, score] of Object.entries(raw)) {
-    qualScoreCache[uuid] = Math.round(score * scale * 10) / 10; // 1dp
+  for (const u of mergedData) {
+    const isEligible = eligible.find(e => e.uuid === u.uuid);
+    if (isEligible) {
+      qualScoreCache[u.uuid] = Math.round(raw[u.uuid] * scale * 10) / 10;
+    } else {
+      qualScoreCache[u.uuid] = 0; // mathematically eliminated
+    }
   }
 }
 
