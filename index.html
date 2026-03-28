@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCSR Ranked — S10 Phase Points Leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #080909;
+    --bg2: #0d0e0f;
+    --bg3: #111213;
+    --border: #1e2022;
+    --text: #d4d8dd;
+    --muted: #525861;
+    --accent: #4ade80;
+    --accent2: #22c55e;
+    --gold: #f59e0b;
+    --silver: #94a3b8;
+    --bronze: #c2845a;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --amber: #fbbf24;
+    --row-hover: #0f1011;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px; min-height: 100vh; line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0 0; position: sticky; top: 0; z-index: 100; background: var(--bg);
+  }
+  .header-inner { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+  .header-top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  h1 { font-family: 'IBM Plex Mono', monospace; font-size: 15px; font-weight: 600; letter-spacing: .03em; }
+  .season-tag {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 500;
+    color: var(--accent); background: rgba(74,222,128,.07);
+    border: 1px solid rgba(74,222,128,.18); border-radius: 0; padding: 1px 7px; letter-spacing: .05em;
+  }
+  .header-meta {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 11px; color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace; padding-bottom: 14px; flex-wrap: wrap;
+  }
+  .live-dot { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  #last-updated { color: var(--text); }
+  #phase-countdown strong { color: var(--text); }
+  .btn-refresh {
+    margin-left: auto; background: none; border: 1px solid var(--border); color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 4px 10px;
+    border-radius: 0; cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 5px;
+  }
+  .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-refresh.spinning svg { animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tab {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted);
+    padding: 8px 16px; cursor: pointer; border: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    background: none; transition: all .15s; letter-spacing: .02em;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── Main ── */
+  main { max-width: 1160px; margin: 0 auto; padding: 22px 20px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Filter bar ── */
+  .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .filter-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: .04em; margin-right: 2px; }
+  .filter-btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 4px 10px;
+    border-radius: 0; border: 1px solid var(--border); background: none;
+    color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .filter-btn:hover { color: var(--text); border-color: #2e3236; }
+  .filter-btn.active { background: rgba(74,222,128,.06); border-color: rgba(74,222,128,.25); color: var(--accent); }
+  .search-input {
+    margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; padding: 4px 10px;
+    border-radius: 0; width: 160px; outline: none; transition: border-color .15s;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: #2e3236; }
+
+  /* ── Table ── */
+  .table-wrap { border: 1px solid var(--border); border-radius: 0; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg2); border-bottom: 1px solid var(--border); }
+  th {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    padding: 9px 12px; text-align: left; white-space: nowrap;
+    cursor: pointer; user-select: none; transition: color .15s;
+  }
+  th:hover { color: var(--text); }
+  th.sorted { color: var(--accent); }
+  th.no-sort { cursor: default; }
+  th.no-sort:hover { color: var(--muted); }
+  .sort-icon { margin-left: 3px; opacity: .45; font-size: 9px; }
+  th.sorted .sort-icon { opacity: 1; }
+  th.num, td.num { text-align: right; }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--row-hover); }
+  td { padding: 7px 12px; font-size: 13px; white-space: nowrap; }
+
+  /* rank */
+  .rank-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); min-width: 24px; display: inline-block; text-align: right; }
+  .rank-1 { color: var(--gold) !important; font-weight: 600; }
+  .rank-2 { color: var(--silver) !important; font-weight: 600; }
+  .rank-3 { color: var(--bronze) !important; font-weight: 600; }
+
+  /* player */
+  .player-cell { display: flex; align-items: center; gap: 7px; }
+  .avatar { width: 22px; height: 22px; border-radius: 0; background: var(--bg3); flex-shrink: 0; image-rendering: pixelated; }
+  .flag { font-size: 13px; line-height: 1; }
+  .nickname { font-weight: 500; color: var(--text); letter-spacing: .01em; }
+
+  /* numbers */
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .pp-pred { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px; color: var(--accent); }
+  .pp-cur  { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+  .pp-gain { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: rgba(74,222,128,.5); }
+
+  /* progress bar */
+  .pp-bar-bg { height: 2px; background: var(--bg3); border-radius: 0; overflow: hidden; min-width: 55px; }
+  .pp-bar-fill { height: 100%; background: linear-gradient(90deg,var(--accent2),var(--accent)); border-radius: 0; }
+
+  /* qualification gap pill */
+  .qual-cell { font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .qual-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 6px; border-radius: 0; font-size: 10px; font-weight: 500; white-space: nowrap;
+  }
+  .qual-lcq  { background: rgba(251,191,36,.06); border: 1px solid rgba(251,191,36,.2); color: var(--amber); }
+  .qual-po   { background: rgba(96,165,250,.06); border: 1px solid rgba(96,165,250,.2); color: var(--blue); }
+  .qual-seed { background: rgba(74,222,128,.05); border: 1px solid rgba(74,222,128,.15); color: rgba(74,222,128,.75); }
+  .qual-top  { color: var(--muted); font-size: 10px; }
+
+  /* threshold rows */
+  .threshold-row td { padding: 5px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .05em; }
+  .threshold-row:hover { background: none !important; }
+  .threshold-playoffs td { background: rgba(74,222,128,.03); border-top: 1px dashed rgba(74,222,128,.3) !important; color: rgba(74,222,128,.55); }
+  .threshold-lcq td { background: rgba(251,191,36,.02); border-top: 1px dashed rgba(251,191,36,.3) !important; color: rgba(251,191,36,.5); }
+
+  /* state */
+  .state-msg { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 52px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+  .spinner { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+
+  /* About */
+  .about-content { max-width: 620px; color: var(--muted); line-height: 1.8; font-size: 13px; }
+  .about-content h2 { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text); margin: 22px 0 8px; letter-spacing: .07em; text-transform: uppercase; }
+  .about-content h2:first-child { margin-top: 0; }
+  .about-content strong { color: var(--text); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .legend-swatch { width: 8px; height: 8px; border-radius: 0; flex-shrink: 0; }
+  .pp-table-wrap { overflow-x: auto; margin-top: 10px; }
+  .pp-table { border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 11px; min-width: 320px; }
+  .pp-table th, .pp-table td { padding: 4px 11px; border: 1px solid var(--border); text-align: right; color: var(--muted); cursor: default; user-select: none; }
+  .pp-table th { color: var(--text); background: var(--bg2); font-size: 11px; }
+  .pp-table td:first-child { color: var(--text); }
+  .pp-table .cur-phase { color: var(--accent); font-weight: 600; }
+  .pp-table tr:hover td { background: var(--row-hover); }
+  .about-dt { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono', monospace; font-size: 11px; margin-top: 8px; }
+  .about-dt td { padding: 5px 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: top; }
+  .about-dt td:first-child { color: var(--text); white-space: nowrap; }
+
+  /* ── Modal ── */
+  #modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.8);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #modal {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 0; width: 100%; max-width: 620px;
+    max-height: 90vh; overflow-y: auto; padding: 24px; position: relative;
+  }
+  #modal-close {
+    position: absolute; top: 14px; right: 14px;
+    background: none; border: none; color: var(--muted);
+    font-size: 14px; cursor: pointer; padding: 4px 8px;
+    border-radius: 0; transition: color .15s;
+  }
+  #modal-close:hover { color: var(--text); }
+  #modal-header { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  #modal-avatar { width: 48px; height: 48px; border-radius: 0; image-rendering: pixelated; background: var(--bg3); flex-shrink: 0; }
+  #modal-name-row { display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; }
+  #modal-flag { font-size: 18px; }
+  #modal-sub { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+  #modal-sub span { display: flex; align-items: center; gap: 4px; }
+  #modal-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 16px; background: #2a2d31; border: 2px solid #2a2d31; box-sizing: border-box; }
+  .stat-card { background: var(--bg3); padding: 8px 10px; }
+  .stat-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600; color: var(--text); }
+  .stat-value.accent { color: var(--accent); }
+  #modal-qual-path { margin-bottom: 16px; display: none; }
+  #modal-qual-path.visible { display: block; }
+  .qual-path-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .qual-path-table { border-collapse: collapse; width: 100%; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .qual-path-table th { color: var(--muted); padding: 4px 10px; text-align: left; border-bottom: 1px solid var(--border); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 500; }
+  .qual-path-table td { padding: 4px 10px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .qual-path-table td:first-child { color: var(--text); }
+  .qual-path-table tr:last-child td { border-bottom: none; }
+  .qual-path-table .current-row td { color: var(--accent); }
+  .qual-path-table .current-row td:first-child { color: var(--accent); }
+
+  #modal-last-match { background: var(--bg3); border: 1px solid var(--border); padding: 10px 14px; margin-bottom: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); display: none; }
+  #modal-last-match.visible { display: block; }
+  #modal-last-match .match-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .match-result-w { color: var(--accent); font-weight: 600; }
+  .match-result-l { color: var(--red); font-weight: 600; }
+  .match-elo-pos { color: var(--accent); }
+  .match-elo-neg { color: var(--red); }
+  #modal-chart-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+  .chart-tab { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); padding: 6px 14px; cursor: pointer; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; transition: all .15s; }
+  .chart-tab:hover { color: var(--text); }
+  .chart-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  #modal-chart-wrap { position: relative; height: 200px; display: flex; align-items: center; justify-content: center; }
+  #modal-canvas { width: 100% !important; height: 100% !important; }
+  #main-tbody tr:not(.threshold-row) { cursor: pointer; }
+
+  #history-chart-wrap {
+    display: flex; gap: 16px; align-items: flex-start;
+  }
+  #history-chart-wrap canvas { flex: 1; min-width: 0; }
+  #history-legend {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px;
+    color: var(--muted); min-width: 110px;
+  }
+  .hist-legend-item {
+    display: flex; align-items: center; gap: 7px;
+    padding: 3px 0; cursor: default; white-space: nowrap;
+  }
+  .hist-legend-swatch { width: 18px; height: 2px; flex-shrink: 0; border-radius: 1px; }
+
+  footer {
+    max-width: 1160px; margin: 36px auto 20px; padding: 16px 20px 0;
+    border-top: 1px solid var(--border); font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-top">
+      <h1>MCSR Ranked</h1>
+      <span class="season-tag">S10 · Phase 3</span>
+    </div>
+    <div class="header-meta">
+      <span class="live-dot"><span class="dot"></span> live</span>
+      <span id="player-count">— players</span>
+      <span id="phase-countdown"></span>
+      <span>updated <span id="last-updated">—</span></span>
+      <button class="btn-refresh" id="btn-refresh" title="Refresh now">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+          <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+          <path d="M8 16H3v5"/>
+        </svg>
+        refresh
+      </button>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="main">leaderboard</button>
+      <button class="tab" data-tab="history">standings history</button>
+      <button class="tab" data-tab="about">about</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- MAIN TAB -->
+  <div class="panel active" id="tab-main">
+    <div class="filter-bar">
+      <span class="filter-label">show:</span>
+      <button class="filter-btn active" data-filter="all">all</button>
+      <button class="filter-btn" data-filter="top12">top 12</button>
+      <button class="filter-btn" data-filter="top100">top 100</button>
+      <input class="search-input" id="main-search" placeholder="search player…" autocomplete="off">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);margin-left:4px">click a player for stats</span>
+    </div>
+    <div class="table-wrap">
+      <div class="state-msg" id="main-loading"><div class="spinner"></div>fetching leaderboard…</div>
+      <table id="main-table" style="display:none">
+        <thead>
+          <tr>
+            <th data-col="ppRank" class="sorted num">#<span class="sort-icon">↑</span></th>
+            <th data-col="phaseMove" style="width:52px">↑ phase<span class="sort-icon">↕</span></th>
+            <th data-col="name">player</th>
+            <th data-col="pred" class="num">pred pts<span class="sort-icon">↕</span></th>
+            <th data-col="cur" class="num">current pts<span class="sort-icon">↕</span></th>
+            <th data-col="gain" class="num">+gain<span class="sort-icon">↕</span></th>
+            <th data-col="elo" class="num">elo<span class="sort-icon">↕</span></th>
+            <th data-col="eloRank" class="num">elo rank<span class="sort-icon">↕</span></th>
+            <th class="no-sort">to qualify</th>
+            <th data-col="lastPlayed" class="num">last played<span class="sort-icon">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="main-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ABOUT TAB -->
+  <div class="panel" id="tab-about">
+    <div class="about-content">
+      <h2>MCSR Ranked S10 Phase Points Tracker</h2>
+      Each season is split into 4 monthly phases. Your Elo rank at phase end earns Phase Points which accumulate across all phases. MSS tournament points are included in current totals.
+
+      <h2>qualification</h2>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:var(--accent)"></div>
+          <span><strong>Top 12</strong> — auto-qualify for Playoffs bracket</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-swatch" style="background:var(--gold)"></div>
+          <span><strong>Top 100</strong> — invited to Last-Chance Qualifier (LCQ) for 4 remaining spots</span>
+        </div>
+      </div>
+      <br>
+      Ties in Phase Points are broken by final season Elo. All players tied at the 100th-place predicted PP value also qualify for LCQ.
+
+      <h2>"to qualify" column</h2>
+      Shows how many Elo points a player needs to gain to reach the next milestone:
+      <br><br>
+      · <strong>Outside top 100</strong> — Elo needed to reach LCQ qualification<br>
+      · <strong>Rank 13–100</strong> — Elo needed to reach Playoffs (top 12)<br>
+      · <strong>Rank 2–12</strong> — Elo needed to move up one seed (beat the player above)<br>
+      · <strong>Rank 1</strong> — nothing to gain<br>
+      <br>
+      The gap is calculated using the Phase 3 points table: we find the lowest Elo rank at which
+      <code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent)">currentPP + phase3Points[rank]</code>
+      meets the target, then show the Elo difference to the player currently at that rank.
+
+      <h2>phase points table</h2>
+      <div class="pp-table-wrap">
+        <table class="pp-table">
+          <thead>
+            <tr><th>Rank</th><th>Phase 1</th><th>Phase 2</th><th class="cur-phase">Phase 3</th><th>Phase 4</th></tr>
+          </thead>
+          <tbody id="pp-ref-tbody"></tbody>
+        </table>
+      </div>
+
+      <h2>data sources</h2>
+      <table class="about-dt">
+        <tr><td>Phase leaderboard</td><td>api.mcsrranked.com/phase-leaderboard?predicted=true</td></tr>
+        <tr><td>Elo leaderboard</td><td>api.mcsrranked.com/leaderboard</td></tr>
+        <tr><td>Avatars</td><td>crafatar.com</td></tr>
+      </table>
+
+      <h2>auto-refresh</h2>
+      Data silently re-fetches every 60 seconds. Last updated time shown in header.
+    </div>
+  </div>
+
+<!-- ── HISTORY TAB ── -->
+  <div class="panel" id="tab-history">
+    <div class="filter-bar">
+      <span class="filter-label">show:</span>
+      <button class="filter-btn active" id="hist-top12-btn">top 12</button>
+      <button class="filter-btn" id="hist-top100-btn">top 100 + tied</button>
+    </div>
+    <div class="table-wrap" style="padding:16px">
+      <div class="state-msg" id="history-empty" style="padding:32px 0">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">
+          tracking starts automatically — check back after a few refreshes
+        </span>
+      </div>
+      <div id="history-chart-wrap" style="display:none">
+        <div id="history-legend" style="display:none;overflow-y:auto;max-height:420px;padding-right:10px;flex-shrink:0"></div>
+        <canvas id="history-canvas" style="min-height:380px"></canvas>
+      </div>
+    </div>
+  </div>
+
+<div id="modal-overlay" style="display:none">
+  <div id="modal">
+    <button id="modal-close">✕</button>
+    <div id="modal-header">
+      <img id="modal-avatar" src="" alt="">
+      <div id="modal-title">
+        <div id="modal-name-row">
+          <span id="modal-flag"></span>
+          <span id="modal-nickname"></span>
+        </div>
+        <div id="modal-sub"></div>
+      </div>
+    </div>
+    <div id="modal-stats-grid"></div>
+    <div id="modal-qual-likelihood" style="display:none;margin-bottom:16px;padding:14px;border:1px solid var(--border)"></div>
+    <div id="modal-qual-path"></div>
+    <div id="modal-last-match"></div>
+    <div id="modal-chart-tabs">
+      <button class="chart-tab active" data-chart="elo">Elo history</button>
+      <button class="chart-tab" data-chart="gap">Qual gap</button>
+      <button class="chart-tab" data-chart="pprank">PP rank</button>
+      <button class="chart-tab" data-chart="phase">Phase points</button>
+    </div>
+    <div id="modal-chart-wrap">
+      <div class="state-msg" id="modal-chart-loading"><div class="spinner"></div>loading…</div>
+      <canvas id="modal-canvas" style="display:none"></canvas>
+    </div>
+  </div>
+</div>
+
+
+<footer>
+  <span>MCSR Ranked S10 · Phase Points Leaderboard</span>
+  <span>data: <a href="https://api.mcsrranked.com" target="_blank">api.mcsrranked.com</a></span>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script>
+const PP_TABLE = [
+  [1,50,60,75,100],[2,47,57,71,94],[3,45,53,67,89],[4,42,50,63,84],
+  [5,40,48,60,79],[6,38,45,56,75],[7,36,43,53,71],[8,34,40,50,67],
+  [9,32,38,48,64],[10,30,36,45,60],[11,29,34,43,57],[12,27,33,41,54],
+  [13,26,31,39,52],[14,25,29,37,49],[15,23,28,35,47],[16,22,27,33,44],
+  [17,21,25,32,42],[18,20,24,30,40],[19,19,23,29,38],[20,18,22,27,36],
+  [21,17,21,26,35],[22,17,20,25,33],[23,16,19,24,32],[24,15,18,23,30],
+  [25,14,17,22,29],[26,14,17,21,28],[27,13,16,20,26],[28,13,15,19,25],
+  [29,12,15,18,24],[30,12,14,17,23],[31,11,13,17,22],[32,11,13,16,21],
+  [33,10,12,15,21],[34,10,12,15,20],[35,9,11,14,19],[36,9,11,14,18],
+  [37,9,11,13,18],[38,8,10,13,17],[39,8,10,12,16],[40,8,9,12,16],
+  [41,8,9,11,15],[42,7,9,11,15],[43,7,8,11,14],[44,7,8,10,14],
+  [45,7,8,10,13],[46,6,8,10,13],[47,6,7,9,12],[48,6,7,9,12],
+  [49,6,7,9,12],[50,6,7,8,11],[51,5,7,8,11],[52,5,6,8,11],
+  [53,5,6,8,10],[54,5,6,8,10],[55,5,6,7,10],[56,5,6,7,9],
+  [57,5,6,7,9],[58,4,5,7,9],[59,4,5,7,9],[60,4,5,6,9],
+  [61,4,5,6,8],[62,4,5,6,8],[63,4,5,6,8],[64,4,5,6,8],
+  [65,4,5,6,8],[66,4,4,6,7],[67,4,4,5,7],[68,4,4,5,7],
+  [69,4,4,5,7],[70,3,4,5,7],[71,3,4,5,7],[72,3,4,5,7],
+  [73,3,4,5,7],[74,3,4,5,6],[75,3,4,5,6],[76,3,4,5,6],
+  [77,3,4,5,6],[78,3,4,5,6],[79,3,4,4,6],[80,3,4,4,6],
+  [81,3,3,4,6],[82,3,3,4,6],[83,3,3,4,6],[84,3,3,4,6],
+  [85,3,3,4,6],[86,3,3,4,6],[87,3,3,4,5],[88,3,3,4,5],
+  [89,3,3,4,5],[90,3,3,4,5],[91,3,3,4,5],[92,3,3,4,5],
+  [93,3,3,4,5],[94,3,3,4,5],[95,3,3,4,5],[96,3,3,4,5],
+  [97,3,3,4,5],[98,3,3,4,5],[99,3,3,4,5],[100,3,3,4,5],
+];
+const p3Points = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+
+document.getElementById('pp-ref-tbody').innerHTML =
+  PP_TABLE.map(([r,p1,p2,p3,p4]) =>
+    `<tr><td>${r}</td><td>${p1}</td><td>${p2}</td><td class="cur-phase">${p3}</td><td>${p4}</td></tr>`
+  ).join('');
+
+
+
+let rawElo      = [];
+let eloByRank   = {};
+let phaseEndsAt = null;
+let sortState   = { col:'ppRank', asc:true };
+let filterMode  = 'all';
+let searchQuery = '';
+
+let prevEloSnapshot  = {};  // uuid → eloRate, for detecting games every 60s
+let lastPlayedMemory = {};  // uuid → unix timestamp (best known value)
+let lastPlayedFetched = false; // only run the API fetch once per page load
+
+function detectGamesFromElo(allPlayers) {
+  const now = Math.floor(Date.now() / 1000);
+  for (const u of allPlayers) {
+    const prevElo = prevEloSnapshot[u.uuid];
+    if (prevElo == null) { prevEloSnapshot[u.uuid] = u.eloRate; continue; }
+    const diff = (u.eloRate ?? 0) - prevElo;
+    if (diff !== 0 && diff !== -5) lastPlayedMemory[u.uuid] = now;
+    prevEloSnapshot[u.uuid] = u.eloRate;
+  }
+}
+
+async function fetchLastPlayedApi(uuid) {
+  try {
+    const r = await fetch(`https://api.mcsrranked.com/users/${uuid}/matches?count=1&type=2&excludedecay=true`);
+    const j = await r.json();
+    if (j.status === 'success' && j.data?.length) return j.data[0].date;
+  } catch {}
+  return null;
+}
+
+async function populateLastPlayedFromApi(players) {
+  if (lastPlayedFetched) return;
+  lastPlayedFetched = true;
+  for (const u of players) {
+    const ts = await fetchLastPlayedApi(u.uuid);
+    if (ts != null && (!lastPlayedMemory[u.uuid] || ts > lastPlayedMemory[u.uuid])) {
+      lastPlayedMemory[u.uuid] = ts;
+      buildMerged();
+      renderTable();
+    }
+    await new Promise(r => setTimeout(r, 80));
+  }
+}
+
+const esc  = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const flag = c => c ? [...c.toUpperCase()].map(ch => String.fromCodePoint(0x1F1E6+ch.charCodeAt(0)-65)).join('') : '';
+const roleBadge = () => '';
+const avatarUrl = uuid => `https://minotar.net/helm/${uuid.replace(/-/g,'')}/24`;
+const rankCls   = n => n===1?'rank-1':n===2?'rank-2':n===3?'rank-3':'';
+const eloColor  = r => r >= 2000 ? '#a78bfa' : r >= 1500 ? '#7dd3fc' : r >= 1200 ? '#86efac' : r >= 900 ? '#fde047' : r >= 600 ? '#d1d5db' : '#6b7280';
+
+function fmtCountdown(ts) {
+  let d = ts - Math.floor(Date.now()/1000);
+  if (d <= 0) return 'phase ended';
+  const days=Math.floor(d/86400); d-=days*86400;
+  const hrs =Math.floor(d/3600);  d-=hrs*3600;
+  const mins=Math.floor(d/60);
+  if (days>0) return `phase ends in <strong>${days}d ${hrs}h</strong>`;
+  if (hrs >0) return `phase ends in <strong>${hrs}h ${mins}m</strong>`;
+  return `phase ends in <strong>${mins}m</strong>`;
+}
+
+const HIDDEN_PLAYERS = new Set(['KenanKardes','Watermelon1708','nyachloe','Hinart']);
+
+function buildMerged() {
+  const eloMap = {};
+  for (const u of rawElo) eloMap[u.uuid] = { eloRate: u.eloRate, eloRank: u.eloRank };
+
+  eloByRank = {};
+  const eloSorted = [...rawElo].sort((a,b) => (b.eloRate ?? 0) - (a.eloRate ?? 0));
+  eloSorted.forEach((u, i) => { eloByRank[i + 1] = u.eloRate ?? 0; });
+
+  const sorted = [...rawPhase]
+    .filter(u => !HIDDEN_PLAYERS.has(u.nickname))
+    .sort((a,b) =>
+    b.predPhasePoint - a.predPhasePoint || a.eloRank - b.eloRank
+  );
+
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i].predPhasePoint === sorted[i-1].predPhasePoint) {
+      sorted[i]._ppRank = sorted[i-1]._ppRank;
+    } else {
+      sorted[i]._ppRank = i + 1; // 1-indexed position of first player with this PP
+    }
+  }
+
+  const lcqThresholdPP    = sorted.length >= 100 ? sorted[99].predPhasePoint : null;
+  const playoffsThresholdPP = sorted.length >= 12  ? sorted[11].predPhasePoint : null;
+
+  const phaseUuids = new Set(rawPhase.map(u => u.uuid));
+  const zeroPPPlayers = rawElo
+    .filter(u => !phaseUuids.has(u.uuid) && !HIDDEN_PLAYERS.has(u.nickname))
+    .map(u => ({
+      uuid: u.uuid,
+      nickname: u.nickname,
+      roleType: u.roleType,
+      country: u.country ?? null,
+      eloRate: u.eloRate ?? 0,
+      eloRank: u.eloRank,
+      seasonResult: u.seasonResult,
+      predPhasePoint: 0,
+      _ppRank: sorted.length + 1, // all tied at the bottom
+      _isZeroPP: true,
+    }));
+
+  const allPlayers = [...sorted, ...zeroPPPlayers];
+
+  mergedData = allPlayers.map(u => {
+    const elo = eloMap[u.uuid] ?? { eloRate: u.eloRate ?? 0, eloRank: u.eloRank };
+    const currentPP = u.seasonResult?.phasePoint ?? 0;
+    const predPP    = u.predPhasePoint;
+    const gain      = predPP - currentPP;
+    const ppRk      = u._ppRank;
+    const eloRk     = elo.eloRank;
+    const eloRate   = elo.eloRate ?? 0;
+
+
+    function simulateQual(targetPosition) {
+      const boundaryIdx       = targetPosition - 1;
+      const boundaryPlayer    = sorted[boundaryIdx];
+      if (!boundaryPlayer) return { gap: null, rank: null };
+
+      const boundaryUuid      = boundaryPlayer.uuid;
+      const boundaryCurrentPP = boundaryPlayer.seasonResult?.phasePoint ?? 0;
+      const boundaryEloRk     = eloMap[boundaryUuid]?.eloRank ?? boundaryPlayer.eloRank ?? targetPosition;
+
+      for (let r = eloRk; r >= 1; r--) {
+        const myNewPredPP = currentPP + p3Points(r);
+        let boundaryNewEloRk = boundaryEloRk;
+        if (boundaryEloRk >= r && boundaryEloRk < eloRk) boundaryNewEloRk = boundaryEloRk + 1;
+        const boundaryNewPredPP = boundaryCurrentPP + p3Points(boundaryNewEloRk);
+
+        if (myNewPredPP > boundaryNewPredPP) {
+          const targetElo = eloByRank[r] ?? 0;
+          return { gap: Math.max(0, targetElo - eloRate), rank: r };
+        }
+        if (myNewPredPP === boundaryNewPredPP) {
+          const boundaryNewElo = eloByRank[boundaryNewEloRk] ?? 0;
+          const targetElo      = eloByRank[r] ?? 0;
+          if (targetElo > boundaryNewElo) {
+            return { gap: Math.max(0, targetElo - eloRate), rank: r };
+          }
+        }
+      }
+      return { gap: null, rank: null };
+    }
+
+    let qualData = null;
+
+    if (ppRk === 1) {
+      qualData = { type:'top' };
+
+    } else if (ppRk <= 12) {
+      const { gap, rank } = simulateQual(ppRk - 1);
+      qualData = { type:'seed', gap, rank };
+
+    } else if (lcqThresholdPP !== null && predPP >= lcqThresholdPP) {
+      const { gap, rank } = simulateQual(12);
+      qualData = { type:'po', gap, rank };
+
+    } else {
+      const { gap, rank } = simulateQual(100);
+      qualData = { type:'lcq', gap, rank };
+    }
+
+    return {
+      uuid: u.uuid,
+      nickname: u.nickname,
+      country: u.country,
+      eloRate, eloRk,
+      currentPP, predPP, gain,
+      ppRk,
+      qualData,
+      lastPlayed: lastPlayedMemory[u.uuid] ?? null,
+      _isZeroPP: u._isZeroPP ?? false,
+    };
+  });
+
+  const preSorted = [...mergedData]
+    .filter(u => !u._isZeroPP)
+    .sort((a, b) => b.currentPP - a.currentPP || b.eloRate - a.eloRate);
+
+  const preRankMap = {};
+  preSorted.forEach((u, i) => { preRankMap[u.uuid] = i + 1; });
+
+  mergedData.forEach(u => {
+    if (u._isZeroPP) { u.phaseMove = null; return; }
+    const preRank = preRankMap[u.uuid] ?? u.ppRk;
+    u.phaseMove = preRank - u.ppRk; // positive = moved up, negative = moved down
+  });
+}
+
+function phaseMoveCell(v) {
+  if (v == null) return '<span style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:11px">—</span>';
+  if (v === 0)   return '<span style="color:var(--muted);font-family:\'IBM Plex Mono\',monospace;font-size:11px">—</span>';
+  if (v > 0)     return `<span style="color:var(--accent);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500">▲${v}</span>`;
+  return `<span style="color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500">▼${Math.abs(v)}</span>`;
+}
+
+function qualPill(q) {
+  if (!q) return '';
+  if (q.type === 'top') return `<span class="qual-top">—</span>`;
+  const labels = { lcq:'→ LCQ', po:'→ Playoffs', seed:'↑ seed' };
+  const cls    = { lcq:'qual-lcq', po:'qual-po', seed:'qual-seed' };
+  const label  = labels[q.type];
+  const klass  = cls[q.type];
+
+  let mainPill;
+  if (q.gap === null) {
+    const msg = q.type === 'seed' ? 'unreachable' : 'unreachable this phase';
+    mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.55">${msg}</span></span>`;
+  } else if (q.gap === 0) {
+    mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.7">qualified</span></span>`;
+  } else {
+    const rankStr = q.rank != null ? ` <span style="opacity:.5">(rank ${q.rank})</span>` : '';
+    mainPill = `<span class="qual-pill ${klass}">${label} +${q.gap} elo${rankStr}</span>`;
+  }
+
+  return mainPill;
+}
+
+function fmtAgo(unixSec) {
+  if (!unixSec) return '—';
+  const diff = Math.floor(Date.now() / 1000) - unixSec;
+  if (diff < 60)       return 'just now';
+  if (diff < 3600)     return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400)    return `${Math.floor(diff/3600)}h ago`;
+  if (diff < 86400*7)  return `${Math.floor(diff/86400)}d ago`;
+  return `${Math.floor(diff/86400/7)}w ago`;
+}
+
+async function fetchAll(spin=true) {
+  const btn = document.getElementById('btn-refresh');
+  if (spin) btn.classList.add('spinning');
+  try {
+    const [pr, er] = await Promise.all([
+      fetch('https://api.mcsrranked.com/phase-leaderboard?predicted=true'),
+      fetch('https://api.mcsrranked.com/leaderboard'),
+    ]);
+    const pj = await pr.json();
+    const ej = await er.json();
+
+    if (pj.status === 'success') {
+      rawPhase    = pj.data.users || [];
+      phaseEndsAt = pj.data.phase?.endsAt ?? null;
+    }
+    if (ej.status === 'success') rawElo = ej.data.users || [];
+
+    const allPlayers = [...rawPhase, ...rawElo.filter(u => !rawPhase.find(p => p.uuid === u.uuid))];
+    detectGamesFromElo(allPlayers);
+
+    buildMerged();
+    recordHistorySnapshot();
+    loadServerHistory(); // async, non-blocking — re-renders when done
+    document.getElementById('player-count').textContent = `${mergedData.length} players`;
+    if (phaseEndsAt)
+      document.getElementById('phase-countdown').innerHTML = fmtCountdown(phaseEndsAt);
+    document.getElementById('last-updated').textContent =
+      new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    renderTable();
+    populateLastPlayedFromApi(allPlayers);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('last-updated').textContent = 'error';
+  } finally {
+    if (spin) btn.classList.remove('spinning');
+  }
+}
+
+function getRows() {
+  let d = [...mergedData];
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    d = d.filter(u => u.nickname.toLowerCase().includes(q));
+  }
+  if (filterMode === 'top12')  d = d.filter(u => u.ppRk <= 12);
+  if (filterMode === 'top100') {
+    const phasePlayers = mergedData.filter(x => !x._isZeroPP);
+    const threshold = phasePlayers.length >= 100 ? phasePlayers[99].predPP : null;
+    d = d.filter(u => !u._isZeroPP && (threshold === null || u.predPP >= threshold));
+  }
+
+  const {col, asc} = sortState;
+  d.sort((a, b) => {
+    let va, vb;
+    if      (col==='ppRank')  { va=a.ppRk;      vb=b.ppRk; }
+    else if (col==='name')    { va=a.nickname.toLowerCase(); vb=b.nickname.toLowerCase(); }
+    else if (col==='pred')    { va=a.predPP;     vb=b.predPP; }
+    else if (col==='cur')     { va=a.currentPP;  vb=b.currentPP; }
+    else if (col==='gain')    { va=a.gain;        vb=b.gain; }
+    else if (col==='elo')     { va=a.eloRate;     vb=b.eloRate; }
+    else if (col==='eloRank')   { va=a.eloRk;        vb=b.eloRk; }
+    else if (col==='phaseMove') { va=a.phaseMove??-999; vb=b.phaseMove??-999; }
+    else if (col==='lastPlayed') { va=a.lastPlayed??0; vb=b.lastPlayed??0; }
+    if (va < vb) return asc ? -1 : 1;
+    if (va > vb) return asc ? 1 : -1;
+    return 0;
+  });
+  return d;
+}
+
+function renderTable() {
+  const loading = document.getElementById('main-loading');
+  const table   = document.getElementById('main-table');
+  if (!mergedData.length) return;
+  loading.style.display = 'none';
+  table.style.display   = '';
+
+  const rows = getRows();
+  const naturalOrder = sortState.col === 'ppRank' && sortState.asc;
+
+  const phasePlayers = mergedData.filter(u => !u._isZeroPP);
+  const playoffsThresholdPP = phasePlayers.length >= 12 ? phasePlayers[11].predPP : null;
+  const lcqThresholdPP = phasePlayers.length >= 100 ? phasePlayers[99].predPP : null;
+
+  let html = '';
+  let shownPlayoffs = false;
+  let shownLCQ      = false;
+
+  rows.forEach((u, idx) => {
+    const f   = flag(u.country);
+
+    html += `<tr data-uuid="${u.uuid}">
+      <td class="num"><span class="rank-num ${rankCls(u.ppRk)}">${u.ppRk}</span></td>
+      <td style="width:52px">${phaseMoveCell(u.phaseMove)}</td>
+      <td>
+        <div class="player-cell">
+          <img class="avatar" src="${avatarUrl(u.uuid)}" alt="" loading="lazy" onerror="this.style.display='none'">
+          ${f ? `<span class="flag">${f}</span>` : ''}
+          <span class="nickname">${esc(u.nickname)}</span>
+          ${roleBadge(u.roleType)}
+        </div>
+      </td>
+      <td class="num"><span class="pp-pred">${u.predPP}</span></td>
+      <td class="num"><span class="pp-cur">${u.currentPP}</span></td>
+      <td class="num"><span class="pp-gain">+${u.gain}</span></td>
+      <td class="num"><span class="mono" style="font-weight:500;color:${eloColor(u.eloRate)}">${u.eloRate ?? '—'}</span></td>
+      <td class="num"><span class="mono" style="color:var(--muted);font-size:12px">${u.eloRk ?? '—'}</span></td>
+      <td>${qualPill(u.qualData)}</td>
+      <td class="num"><span class="mono last-played-cell" style="font-size:11px;color:var(--muted)">${fmtAgo(u.lastPlayed)}</span></td>
+    </tr>`;
+
+    if (naturalOrder) {
+      const next = rows[idx+1];
+      if (!shownPlayoffs && playoffsThresholdPP !== null) {
+        if (u.predPP >= playoffsThresholdPP && (!next || next.predPP < playoffsThresholdPP)) {
+          shownPlayoffs = true;
+          html += `<tr class="threshold-row threshold-playoffs">
+            <td colspan="10">── top 12 · auto-qualify for playoffs ──────────────────────────────────</td>
+          </tr>`;
+        }
+      }
+      if (!shownLCQ && lcqThresholdPP !== null) {
+        if (u.predPP >= lcqThresholdPP && (!next || next.predPP < lcqThresholdPP)) {
+          shownLCQ = true;
+          html += `<tr class="threshold-row threshold-lcq">
+            <td colspan="10">── top 100 · invited to last-chance qualifier (lcq) ──────────────────</td>
+          </tr>`;
+        }
+      }
+    }
+  });
+
+  document.getElementById('main-tbody').innerHTML = html;
+}
+
+document.querySelectorAll('#main-table thead th').forEach(th => {
+  const col = th.dataset.col;
+  if (!col || th.classList.contains('no-sort')) return;
+  th.addEventListener('click', () => {
+    if (sortState.col === col) sortState.asc = !sortState.asc;
+    else { sortState.col = col; sortState.asc = col==='ppRank'||col==='eloRank'||col==='name'; }
+    document.querySelectorAll('#main-table thead th').forEach(t => {
+      t.classList.remove('sorted');
+      const ic = t.querySelector('.sort-icon');
+      if (ic) ic.textContent = '↕';
+    });
+    th.classList.add('sorted');
+    const ic = th.querySelector('.sort-icon');
+    if (ic) ic.textContent = sortState.asc ? '↑' : '↓';
+    renderTable();
+  });
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+    if (tab.dataset.tab === 'history') renderHistoryChart();
+  });
+});
+
+document.querySelectorAll('[data-filter]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterMode = btn.dataset.filter;
+    renderTable();
+  });
+});
+
+document.getElementById('main-search').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  renderTable();
+});
+
+document.getElementById('btn-refresh').addEventListener('click', () => fetchAll(true));
+
+setInterval(() => fetchAll(false), 60_000);
+
+setInterval(() => {
+  if (phaseEndsAt)
+    document.getElementById('phase-countdown').innerHTML = fmtCountdown(phaseEndsAt);
+}, 30_000);
+
+const SUPABASE_URL     = '';
+const SUPABASE_ANON_KEY = '';
+
+let serverSnapshots = [];
+let tsHistory = {};
+
+async function loadServerHistory() {
+  try {
+    const r = await fetch(`https://olavmn4.github.io/PredPhasePtsLb/history.json?t=${Date.now()}`);
+    const data = await r.json();
+    if (Array.isArray(data)) {
+      serverSnapshots = data;
+      tsHistory = buildTsHistory();
+      serverLastPlayed = buildServerLastPlayed();
+      buildMerged();
+      renderTable();
+    }
+  } catch(e) { console.warn('history fetch failed', e); }
+}
+
+let serverLastPlayed = {};
+
+function buildTsHistory() {
+  const out = {};
+  for (const snap of serverSnapshots) {
+    for (const p of (snap.players ?? [])) {
+      if (!out[p.uuid]) out[p.uuid] = [];
+      out[p.uuid].push({ t: snap.t, eloRate: p.eloRate, ppRk: p.ppRk, qualGap: p.qualGap, qualType: p.qualType });
+    }
+  }
+  return out;
+}
+
+function buildServerLastPlayed() {
+  if (!serverSnapshots.length) return {};
+  const latest = serverSnapshots[serverSnapshots.length - 1];
+  const out = {};
+  for (const p of (latest.players ?? [])) {
+    if (p.lastPlayed) {
+      out[p.uuid] = p.lastPlayed;
+      if (!lastPlayedMemory[p.uuid] || p.lastPlayed > lastPlayedMemory[p.uuid]) {
+        lastPlayedMemory[p.uuid] = p.lastPlayed;
+      }
+    }
+  }
+  return out;
+}
+
+function recordHistorySnapshot() {} // no-op — handled server-side by GitHub Action
+
+let modalChart = null;
+let modalMatches = [];
+let modalUser = null;
+let activeChartTab = 'elo';
+
+function fmtTime(ms) {
+  if (!ms) return '—';
+  const s = Math.floor(ms/1000);
+  const m = Math.floor(s/60);
+  const sec = s % 60;
+  return `${m}:${sec.toString().padStart(2,'0')}`;
+}
+
+function fmtAvgTime(completionTimeMs, completions) {
+  if (!completions || !completionTimeMs) return '—';
+  return fmtTime(completionTimeMs / completions);
+}
+
+function fmtAxisTime(unixSec) {
+  const d = new Date(unixSec * 1000);
+  return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2,'0')}`;
+}
+
+function buildEloGradient(ctx2d, chartArea, dataValues) {
+  if (!dataValues.length) return '#4ade80';
+  const min = Math.min(...dataValues.filter(v=>v!=null));
+  const max = Math.max(...dataValues.filter(v=>v!=null));
+  if (min === max) return eloColor(min);
+
+  const grad = ctx2d.createLinearGradient(chartArea.left, 0, chartArea.right, 0);
+  const stops = [
+    { elo: 0,    color: '#6b7280' },
+    { elo: 600,  color: '#d1d5db' },
+    { elo: 900,  color: '#fde047' },
+    { elo: 1200, color: '#86efac' },
+    { elo: 1500, color: '#7dd3fc' },
+    { elo: 2000, color: '#a78bfa' },
+    { elo: 9999, color: '#a78bfa' },
+  ];
+  stops.forEach(s => {
+    const pos = Math.max(0, Math.min(1, (s.elo - min) / (max - min)));
+    grad.addColorStop(pos, s.color);
+  });
+  return grad;
+}
+
+async function openModal(uuid) {
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+
+  document.getElementById('modal-stats-grid').innerHTML = '';
+  document.getElementById('modal-qual-likelihood').style.display = 'none';
+  document.getElementById('modal-qual-path').classList.remove('visible');
+  document.getElementById('modal-last-match').classList.remove('visible');
+  document.getElementById('modal-chart-loading').style.display = 'flex';
+  document.getElementById('modal-canvas').style.display = 'none';
+  if (modalChart) { modalChart.destroy(); modalChart = null; }
+  activeChartTab = 'elo';
+  document.querySelectorAll('.chart-tab').forEach(t => t.classList.toggle('active', t.dataset.chart === 'elo'));
+
+  const row = mergedData.find(u => u.uuid === uuid);
+  document.getElementById('modal-avatar').src = `https://minotar.net/helm/${uuid.replace(/-/g,'')}/48`;
+  document.getElementById('modal-nickname').textContent = row?.nickname ?? '…';
+  document.getElementById('modal-flag').textContent = row?.country ? flag(row.country) : '';
+  document.getElementById('modal-sub').innerHTML = `
+    <span style="color:${eloColor(row?.eloRate??0)}">${row?.eloRate ?? '—'} elo</span>
+    <span>rank #${row?.eloRk ?? '—'}</span>
+    <span style="color:var(--accent)">${row?.predPP ?? '—'} pred pts</span>
+    <span>${row?.lastPlayed ? 'last played ' + fmtAgo(row.lastPlayed) : ''}</span>
+  `;
+
+  try {
+    const [statsRes, matchRes] = await Promise.all([
+      fetch(`https://api.mcsrranked.com/users/${uuid}`),
+      fetch(`https://api.mcsrranked.com/users/${uuid}/matches?count=100&type=2&season=10`),
+    ]);
+    const statsJson = await statsRes.json();
+    const matchJson = await matchRes.json();
+
+    if (statsJson.status === 'success') {
+      modalUser = statsJson.data;
+      renderModalStats(modalUser, row);
+      renderQualLikelihood(row);
+      renderQualPath(row);
+    }
+    if (matchJson.status === 'success') {
+      modalMatches = matchJson.data || [];
+      renderLastMatch(uuid, modalMatches[0]);
+    }
+    renderChart(uuid, activeChartTab, row);
+  } catch(e) {
+    console.error(e);
+    document.getElementById('modal-chart-loading').innerHTML = '<span style="color:var(--red)">failed to load</span>';
+  }
+}
+
+function renderModalStats(data, row) {
+  const s = data.statistics?.season;
+  const phases = data.seasonResult?.phases ?? [];
+  const wins = s?.wins?.ranked ?? 0;
+  const losses = s?.loses?.ranked ?? 0;
+  const total = wins + losses;
+  const wr = total > 0 ? ((wins/total)*100).toFixed(1) : '—';
+  const completions = s?.completions?.ranked ?? 0;
+  const played = s?.playedMatches?.ranked ?? 0;
+  const compRate = played > 0 ? ((completions/played)*100).toFixed(1) : '—';
+  const avgTime = fmtAvgTime(s?.completionTime?.ranked, completions);
+
+  const p1pts = phases.find(p=>p.phase===1)?.point ?? 0;
+  const p2pts = phases.find(p=>p.phase===2)?.point ?? 0;
+  const mss   = Math.max(0, (row?.predPP ?? 0) - p1pts - p2pts - (row?.gain ?? 0));
+
+  const cards = [
+    { label:'pred phase pts', value: row?.predPP ?? '—', accent: true },
+    { label:'current phase pts', value: row?.currentPP ?? '—' },
+    { label:'wins (S10)', value: wins },
+    { label:'losses (S10)', value: losses },
+    { label:'win rate', value: wr + '%' },
+    { label:'completions', value: completions },
+    { label:'best time (S10)', value: fmtTime(s?.bestTime?.ranked) },
+    { label:'avg comp time', value: avgTime },
+    { label:'win streak', value: s?.currentWinStreak?.ranked ?? 0 },
+  ];
+
+  document.getElementById('modal-stats-grid').innerHTML = cards.map(c =>
+    `<div class="stat-card">
+      <div class="stat-label">${c.label}</div>
+      <div class="stat-value${c.accent?' accent':''}">${c.value}</div>
+    </div>`
+  ).join('');
+}
+
+function calcQualLikelihood(row) {
+  if (!row) return null;
+
+  const PLAYOFFS_TARGET = 159;
+  const predPP   = row.predPP   ?? 0;
+  const currentPP = row.currentPP ?? 0;
+  const eloRk    = row.eloRk    ?? 999;
+  const ppRk     = row.ppRk     ?? 999;
+  const qualType = row.qualData?.type;
+  const qualGap  = row.qualData?.gap;
+
+  const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+  const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+
+  const maxP3Gain = p3Pts(1);
+  const maxP4Gain = p4Pts(1);
+  const maxPossiblePP = currentPP + maxP3Gain + maxP4Gain;
+
+  // ── Factor 1: reachability (0-40 pts) ──────────────────────────────────
+  // Can they mathematically reach 159? How easily?
+  let reachScore = 0;
+  if (predPP >= PLAYOFFS_TARGET) {
+    reachScore = 40; // already on track with current P3 pred
+  } else if (maxPossiblePP >= PLAYOFFS_TARGET) {
+    // How much buffer do they have?
+    const needed = PLAYOFFS_TARGET - currentPP;
+    const available = maxP3Gain + maxP4Gain;
+    const ratio = Math.min(1, (available - needed + maxP3Gain * 0.3) / available);
+    reachScore = Math.round(ratio * 35);
+  } else {
+    reachScore = 0; // mathematically impossible
+  }
+
+  // ── Factor 2: current position (0-25 pts) ──────────────────────────────
+  let posScore = 0;
+  if (ppRk <= 12)       posScore = 25; // in playoffs
+  else if (ppRk <= 20)  posScore = 20;
+  else if (ppRk <= 35)  posScore = 14;
+  else if (ppRk <= 60)  posScore = 8;
+  else if (ppRk <= 100) posScore = 4;
+  else                  posScore = 1;
+
+  // ── Factor 3: Elo rank trajectory from history (0-20 pts) ──────────────
+  let trendScore = 10; // neutral default
+  const uuid = row.uuid;
+  const hist = tsHistory[uuid] ?? [];
+  if (hist.length >= 2) {
+    const recent = hist.filter(p => p.t >= Math.floor(Date.now()/1000) - 7*24*3600);
+    if (recent.length >= 2) {
+      const oldest = recent[0];
+      const newest = recent[recent.length - 1];
+      const rankDelta = oldest.ppRk - newest.ppRk; // positive = moved up
+      if      (rankDelta >= 5)  trendScore = 20;
+      else if (rankDelta >= 2)  trendScore = 16;
+      else if (rankDelta >= 0)  trendScore = 12;
+      else if (rankDelta >= -3) trendScore = 7;
+      else                      trendScore = 3;
+    }
+  }
+
+  // ── Factor 4: Elo rank (proxy for skill ceiling) (0-10 pts) ────────────
+  let eloScore = 0;
+  if      (eloRk <= 5)   eloScore = 10;
+  else if (eloRk <= 15)  eloScore = 8;
+  else if (eloRk <= 30)  eloScore = 6;
+  else if (eloRk <= 60)  eloScore = 4;
+  else if (eloRk <= 100) eloScore = 2;
+  else                   eloScore = 1;
+
+  // ── Factor 5: activity (0-5 pts) ───────────────────────────────────────
+  let activityScore = 3; // default neutral
+  const lastPlayed = row.lastPlayed;
+  if (lastPlayed) {
+    const hoursAgo = (Date.now()/1000 - lastPlayed) / 3600;
+    if      (hoursAgo < 6)   activityScore = 5;
+    else if (hoursAgo < 24)  activityScore = 4;
+    else if (hoursAgo < 72)  activityScore = 3;
+    else if (hoursAgo < 168) activityScore = 2;
+    else                     activityScore = 1;
+  }
+
+  // ── Combine ─────────────────────────────────────────────────────────────
+  const raw = reachScore + posScore + trendScore + eloScore + activityScore;
+  const pct = Math.min(99, Math.max(1, Math.round(raw)));
+
+  // Override: mathematically impossible
+  if (maxPossiblePP < PLAYOFFS_TARGET) return { pct: 0, factors: { reachScore, posScore, trendScore, eloScore, activityScore } };
+
+  return {
+    pct,
+    factors: { reachScore, posScore, trendScore, eloScore, activityScore },
+  };
+}
+
+function renderQualLikelihood(row) {
+  const el = document.getElementById('modal-qual-likelihood');
+  if (!el) return;
+  const result = calcQualLikelihood(row);
+  if (!result) { el.style.display = 'none'; return; }
+
+  const { pct, factors } = result;
+  const color = pct >= 70 ? 'var(--accent)' : pct >= 40 ? '#fbbf24' : '#f87171';
+  const label = pct >= 85 ? 'very likely' : pct >= 65 ? 'likely' : pct >= 40 ? 'possible' : pct >= 15 ? 'unlikely' : pct === 0 ? 'eliminated' : 'very unlikely';
+
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="qual-path-label">playoffs qualification likelihood</div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:700;color:${color}">${pct}%</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted)">${label}</div>
+    </div>
+    <div style="background:var(--bg3);height:4px;border-radius:0;margin-bottom:12px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${color};transition:width .4s"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted)">
+      <div>reachability <span style="float:right;color:var(--text)">${factors.reachScore}/40</span></div>
+      <div>current rank <span style="float:right;color:var(--text)">${factors.posScore}/25</span></div>
+      <div>rank trend <span style="float:right;color:var(--text)">${factors.trendScore}/20</span></div>
+      <div>elo rank <span style="float:right;color:var(--text)">${factors.eloScore}/10</span></div>
+      <div>activity <span style="float:right;color:var(--text)">${factors.activityScore}/5</span></div>
+    </div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.6">estimate based on current trajectory · target ~159 pts</div>
+  `;
+}
+
+function renderQualPath(row) {
+  const el = document.getElementById('modal-qual-path');
+  if (!row || row._isZeroPP) { el.classList.remove('visible'); return; }
+
+  const PLAYOFFS_TARGET = 159;
+  const currentPP = row.currentPP ?? 0;
+  const currentP3Rank = row.eloRk;
+
+  const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+  const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+
+  const rows = [];
+  for (let r3 = 1; r3 <= 100; r3++) {
+    const ppAfterP3 = currentPP + p3Pts(r3);
+    const needed = PLAYOFFS_TARGET - ppAfterP3;
+    let worstP4;
+    if (needed <= 0) {
+      worstP4 = '✓ qualified';
+    } else {
+      worstP4 = null;
+      for (let r4 = 100; r4 >= 1; r4--) {
+        if (p4Pts(r4) >= needed) { worstP4 = `rank ${r4}`; break; }
+      }
+      if (!worstP4) {
+        if (r3 !== currentP3Rank) continue;
+        worstP4 = 'unreachable';
+      }
+    }
+    rows.push({ r3, ppAfterP3, worstP4, isCurrent: r3 === currentP3Rank });
+  }
+
+  el.innerHTML = `
+    <div class="qual-path-label">playoffs path (target ~${PLAYOFFS_TARGET} pts) — your current P3 rank highlighted</div>
+    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border)">
+      <table class="qual-path-table" style="width:100%">
+        <thead style="position:sticky;top:0;background:var(--bg2)">
+          <tr><th>P3 elo rank</th><th>pts after P3</th><th>worst P4 rank for playoffs</th></tr>
+        </thead>
+        <tbody id="qual-path-tbody">${rows.map(r => `
+          <tr class="${r.isCurrent ? 'current-row' : ''}" ${r.isCurrent ? 'id="qual-path-current"' : ''}>
+            <td>${r.isCurrent ? '→ ' : ''}${r.r3}</td>
+            <td>${r.ppAfterP3}</td>
+            <td>${r.worstP4}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  el.classList.add('visible');
+
+  // Scroll to current rank row
+  setTimeout(() => {
+    const cur = document.getElementById('qual-path-current');
+    if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 50);
+}
+
+function renderLastMatch(uuid, match) {
+  const el = document.getElementById('modal-last-match');
+  if (!match) return;
+  const change = match.changes?.find(c => c.uuid === uuid);
+  const opponent = match.players?.find(p => p.uuid !== uuid);
+  const won = match.result?.uuid === uuid;
+  const delta = change?.change ?? 0;
+  const deltaStr = delta >= 0 ? `+${delta}` : `${delta}`;
+  const deltaClass = delta >= 0 ? 'match-elo-pos' : 'match-elo-neg';
+  const resultClass = won ? 'match-result-w' : 'match-result-l';
+  el.innerHTML = `<div class="stat-label" style="margin-bottom:6px">last match</div>
+    <div class="match-row">
+      <span class="${resultClass}">${won ? 'WIN' : 'LOSS'}</span>
+      <span>vs ${esc(opponent?.nickname ?? '?')}</span>
+      <span class="${deltaClass}">${deltaStr} elo</span>
+      <span style="color:var(--muted)">${match.forfeited ? '(forfeit)' : fmtTime(match.result?.time)}</span>
+      <span style="color:var(--muted);margin-left:auto">${fmtAgo(match.date)}</span>
+    </div>`;
+  el.classList.add('visible');
+}
+
+const chartBaseOpts = () => ({
+  responsive: true, maintainAspectRatio: false,
+  plugins: { legend: { display: false }, tooltip: {
+    mode: 'index', intersect: false,
+    backgroundColor: '#1a1c1f', borderColor: '#272a2e', borderWidth: 1,
+    titleColor: '#e2e4e8', bodyColor: '#6b7280',
+    titleFont: { family: 'IBM Plex Mono', size: 11 },
+    bodyFont:  { family: 'IBM Plex Mono', size: 11 },
+  }},
+  scales: {
+    x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 7, maxRotation: 0 } },
+    y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#6b7280', font: { family: 'IBM Plex Mono', size: 10 } } },
+  },
+});
+
+function renderChart(uuid, type, row) {
+  const loading = document.getElementById('modal-chart-loading');
+  const canvas  = document.getElementById('modal-canvas');
+
+  if ((type === 'gap' || type === 'pprank') && (!tsHistory[uuid] || tsHistory[uuid].length < 2)) {
+    loading.style.display = 'flex';
+    loading.innerHTML = '<span style="color:var(--muted);font-family:IBM Plex Mono,monospace;font-size:11px">tracking starts automatically — check back after a few refreshes</span>';
+    canvas.style.display = 'none';
+    return;
+  }
+  if (type === 'elo' && !modalMatches.length) {
+    loading.style.display = 'flex';
+    loading.innerHTML = '<span style="color:var(--muted)">no match data</span>';
+    canvas.style.display = 'none';
+    return;
+  }
+
+  loading.style.display = 'none';
+  canvas.style.display = 'block';
+  if (modalChart) { modalChart.destroy(); modalChart = null; }
+  const ctx = canvas.getContext('2d');
+  const opts = chartBaseOpts();
+
+  if (type === 'elo') {
+    const ms = [...modalMatches].reverse();
+    const labels = ms.map(m => fmtAgo(m.date));
+    const data = ms.map(m => {
+      const c = m.changes?.find(c => c.uuid === uuid);
+      return c ? c.eloRate + c.change : null; // post-game elo
+    });
+
+    const TIERS = [
+      { min: 2000, label: 'Netherite', color: '#a78bfa' },
+      { min: 1500, label: 'Diamond',   color: '#7dd3fc' },
+      { min: 1200, label: 'Emerald',   color: '#86efac' },
+      { min: 900,  label: 'Gold',      color: '#fde047' },
+      { min: 600,  label: 'Iron',      color: '#d1d5db' },
+      { min: 0,    label: 'Coal',      color: '#6b7280' },
+    ];
+
+    const tierColor = v => {
+      for (const t of TIERS) if (v >= t.min) return t.color;
+      return '#6b7280';
+    };
+
+    const validData = data.filter(v => v != null);
+    const minVal = Math.min(...validData);
+    const maxVal = Math.max(...validData);
+    const visibleTiers = TIERS.filter(t => t.min >= minVal - 200 && t.min <= maxVal + 200);
+
+    modalChart = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [{
+        data,
+        borderColor: ctx => {
+          const v = ctx.p1?.parsed?.y;
+          return v != null ? tierColor(v) : '#4ade80';
+        },
+        segment: {
+          borderColor: ctx => tierColor(ctx.p1?.parsed?.y ?? 0),
+        },
+        pointBackgroundColor: data.map(v => v != null ? tierColor(v) : '#4ade80'),
+        backgroundColor: 'rgba(0,0,0,0)',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.1, fill: false,
+      }]},
+      options: {
+        ...opts,
+        plugins: {
+          ...opts.plugins,
+          tooltip: { ...opts.plugins.tooltip, callbacks: {
+            title: i => `Match ${i[0].dataIndex + 1}  ·  ${i[0].label}`,
+            label: i => ` ${i.raw} elo`,
+          }},
+          annotation: undefined,
+        },
+        scales: {
+          ...opts.scales,
+          y: {
+            ...opts.scales.y,
+            afterDataLimits: scale => {
+              scale.max += 50;
+              scale.min -= 50;
+            },
+            ticks: {
+              ...opts.scales.y.ticks,
+              callback: v => {
+                const t = TIERS.find(t => t.min === v);
+                return t ? `${t.min} · ${t.label}` : v;
+              },
+            },
+            afterBuildTicks: axis => {
+              const extra = visibleTiers.map(t => ({ value: t.min }));
+              axis.ticks = [...axis.ticks.filter(t =>
+                !visibleTiers.find(vt => vt.min === t.value)
+              ), ...extra].sort((a,b) => a.value - b.value);
+            },
+          },
+        },
+      },
+    });
+
+  } else if (type === 'gap') {
+    const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+    const hist = (tsHistory[uuid] ?? []).filter(p => p.t >= sevenDaysAgo);
+    const data = hist.map(p => ({ x: p.t * 1000, y: p.qualGap ?? null }));
+    const pointColors = hist.map(p =>
+      p.qualType === 'lcq_to_po' ? '#60a5fa' :
+      p.qualType === 'lcq'       ? '#fbbf24' :
+                                   '#4ade80'
+    );
+
+    modalChart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets: [{
+        data,
+        borderColor: ctx => pointColors[ctx.p1DataIndex] ?? '#4ade80',
+        segment: { borderColor: ctx => pointColors[ctx.p1DataIndex] ?? '#4ade80' },
+        backgroundColor: 'rgba(96,165,250,.04)',
+        borderWidth: 2,
+        pointBackgroundColor: pointColors,
+        tension: 0.2, fill: true, pointRadius: 0, pointHoverRadius: 3,
+      }]},
+      options: {
+        ...opts,
+        plugins: { ...opts.plugins,
+          legend: { display: false },
+          tooltip: { ...opts.plugins.tooltip, callbacks: {
+            label: i => {
+              const p = hist[i.dataIndex];
+              const target = p?.qualType === 'lcq_to_po' ? '→ Playoffs' : p?.qualType === 'lcq' ? '→ LCQ' : '↑ seed';
+              return ` ${target}: +${i.parsed.y ?? 0} elo needed`;
+            },
+          }},
+        },
+        scales: {
+          ...opts.scales,
+          x: { type: 'time', time: { tooltipFormat: 'MMM d, HH:mm', displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' } }, ticks: { color: '#525861', font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 }, grid: { color: '#1e2022' } },
+          y: { ...opts.scales.y, beginAtZero: true },
+        },
+      },
+    });
+
+  } else if (type === 'pprank') {
+    const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+    const hist = (tsHistory[uuid] ?? []).filter(p => p.t >= sevenDaysAgo);
+    const data = hist.map(p => ({ x: p.t * 1000, y: p.ppRk ?? null }));
+
+    modalChart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets: [{
+        data,
+        borderColor: '#a78bfa',
+        backgroundColor: 'rgba(167,139,250,.06)',
+        borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0.2, fill: true,
+      }]},
+      options: {
+        ...opts,
+        plugins: { ...opts.plugins, tooltip: { ...opts.plugins.tooltip, callbacks: {
+          label: i => ` pred PP rank #${i.parsed.y}`,
+        }}},
+        scales: {
+          ...opts.scales,
+          x: { type: 'time', time: { tooltipFormat: 'MMM d, HH:mm', displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' } }, ticks: { color: '#525861', font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 }, grid: { color: '#1e2022' } },
+          y: { ...opts.scales.y, reverse: true, ticks: { ...opts.scales.y.ticks, callback: v => `#${v}` } },
+        },
+      },
+    });
+
+  } else if (type === 'phase') {
+    const phases = modalUser?.seasonResult?.phases ?? [];
+    const p1 = phases.find(p=>p.phase===1)?.point ?? 0;
+    const p2 = phases.find(p=>p.phase===2)?.point ?? 0;
+    const p3gain = row?.gain ?? 0;
+    const mss = Math.max(0, (row?.predPP ?? 0) - p1 - p2 - p3gain);
+    const labels = ['Phase 1','Phase 2', ...(mss > 0 ? ['MSS'] : []), 'Phase 3 (pred)'];
+    const data   = [p1, p2, ...(mss > 0 ? [mss] : []), p3gain];
+    const colors = [
+      'rgba(74,222,128,.6)', 'rgba(74,222,128,.6)',
+      ...(mss > 0 ? ['rgba(251,191,36,.6)'] : []),
+      'rgba(74,222,128,.25)',
+    ];
+    modalChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 0 }]},
+      options: { ...opts, scales: { ...opts.scales, y: { ...opts.scales.y, beginAtZero: true }}},
+    });
+  }
+}
+
+document.querySelectorAll('.chart-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    activeChartTab = tab.dataset.chart;
+    document.querySelectorAll('.chart-tab').forEach(t => t.classList.toggle('active', t === tab));
+    const row = mergedData.find(u => u.uuid === (modalUser?.uuid ?? ''));
+    renderChart(modalUser?.uuid ?? '', activeChartTab, row);
+  });
+});
+
+document.getElementById('main-tbody').addEventListener('click', e => {
+  const tr = e.target.closest('tr');
+  if (!tr || tr.classList.contains('threshold-row')) return;
+  const uuid = tr.dataset.uuid;
+  if (uuid) openModal(uuid);
+});
+
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  if (modalChart) { modalChart.destroy(); modalChart = null; }
+  modalMatches = []; modalUser = null;
+}
+
+let historyChart = null;
+let historyMode  = 'top12';
+const helmImageCache = {}; // uuid → Image object
+
+const HISTORY_PALETTE = [
+  '#4ade80','#60a5fa','#f59e0b','#f87171','#a78bfa','#34d399','#fb923c',
+  '#e879f9','#38bdf8','#fbbf24','#86efac','#c084fc','#fdba74','#6ee7b7',
+];
+const playerColor = (() => {
+  const map = {};
+  let i = 0;
+  return uuid => { if (!map[uuid]) map[uuid] = HISTORY_PALETTE[i++ % HISTORY_PALETTE.length]; return map[uuid]; };
+})();
+
+function updateLegendHighlight(activeIdx) {
+  document.querySelectorAll('.hist-legend-item').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    el.style.opacity = activeIdx === null || idx === activeIdx ? '1' : '0.3';
+    el.style.fontWeight = idx === activeIdx ? '600' : '';
+  });
+}
+
+function renderHistoryChart() {
+  const wrap   = document.getElementById('history-chart-wrap');
+  const canvas = document.getElementById('history-canvas');
+  const legend = document.getElementById('history-legend');
+  const empty  = document.getElementById('history-empty');
+
+  const allHist = Object.entries(tsHistory);
+  if (!allHist.length || allHist.every(([,h]) => h.length < 2)) {
+    empty.style.display = 'flex'; wrap.style.display = 'none';
+    if (historyChart) { historyChart.destroy(); historyChart = null; }
+    return;
+  }
+
+  const phasePlayers = mergedData.filter(u => !u._isZeroPP);
+  const lcqThresholdPP = phasePlayers.length >= 100 ? phasePlayers[99]?.predPP : null;
+
+  let included = allHist.filter(([uuid]) => {
+    const u = mergedData.find(x => x.uuid === uuid);
+    if (!u) return false;
+    if (historyMode === 'top12') return u.ppRk <= 12;
+    return lcqThresholdPP !== null ? u.predPP >= lcqThresholdPP : u.ppRk <= 100;
+  });
+
+  included.sort(([uuidA, histA], [uuidB, histB]) => {
+    const getLatestRk = (hist) => [...hist].reverse().find(p => p.ppRk != null)?.ppRk ?? 999;
+    const a = mergedData.find(x => x.uuid === uuidA)?.ppRk ?? getLatestRk(histA);
+    const b = mergedData.find(x => x.uuid === uuidB)?.ppRk ?? getLatestRk(histB);
+    return a - b;
+  });
+
+  if (!included.length) {
+    empty.style.display = 'flex'; wrap.style.display = 'none';
+    if (historyChart) { historyChart.destroy(); historyChart = null; }
+    return;
+  }
+
+  empty.style.display = 'none';
+  wrap.style.display = 'flex';
+  canvas.style.display = 'block';
+  if (historyChart) { historyChart.destroy(); historyChart = null; }
+  frozenDatasetIndex = null;
+
+  // Limit to last 7 days
+  const sevenDaysAgo = Math.floor(Date.now() / 1000) - 7 * 24 * 3600;
+  const isTop12 = historyMode === 'top12';
+
+  const datasets = included.map(([uuid, hist]) => {
+    const u = mergedData.find(x => x.uuid === uuid);
+    // Only include points within last 7 days, using { x: ms, y: rank } format
+    const recentHist = hist.filter(p => p.t >= sevenDaysAgo);
+    if (!recentHist.length) return null;
+    const data = recentHist.map(p => ({ x: p.t * 1000, y: p.ppRk }));
+    return { label: u?.nickname ?? uuid.slice(0,8), data, borderColor: playerColor(uuid), backgroundColor: 'rgba(0,0,0,0)', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4, tension: 0.1, fill: false, uuid };
+  }).filter(Boolean);
+
+  if (!datasets.length) {
+    empty.style.display = 'flex'; wrap.style.display = 'none';
+    return;
+  }
+
+  legend.style.display = 'block';
+  legend.innerHTML = datasets.map((ds, i) => {
+    const u = mergedData.find(x => x.uuid === ds.uuid);
+    const helmUrl = `https://minotar.net/helm/${ds.uuid.replace(/-/g,'')}/16`;
+    return `<div class="hist-legend-item" data-idx="${i}" style="cursor:pointer;transition:opacity .15s">
+      <div class="hist-legend-swatch" style="background:${ds.borderColor}"></div>
+      ${`<img src="${helmUrl}" width="14" height="14" style="image-rendering:pixelated;border-radius:0;flex-shrink:0" onerror="this.style.display='none'">`}
+      <span>${esc(u?.nickname ?? ds.label)}</span>
+    </div>`;
+  }).join('');
+
+  const HELM_SIZE = 18;
+  const helmPlugin = {
+    id: 'helmEndpoints',
+    afterDraw(chart) {
+      if (!isTop12) return;
+      const ctx2 = chart.ctx;
+      chart.data.datasets.forEach((ds, i) => {
+        const meta = chart.getDatasetMeta(i);
+        let lastPoint = null;
+        for (let j = meta.data.length - 1; j >= 0; j--) {
+          if (ds.data[j] != null) { lastPoint = meta.data[j]; break; }
+        }
+        if (!lastPoint) return;
+        const img = helmImageCache[ds.uuid];
+        if (!img || !img.complete) return;
+        ctx2.save();
+        ctx2.imageSmoothingEnabled = false;
+        const size = HELM_SIZE;
+        ctx2.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight,
+          Math.round(lastPoint.x + 4), Math.round(lastPoint.y - size / 2), size, size);
+        ctx2.restore();
+      });
+    },
+  };
+
+  datasets.forEach(ds => {
+    if (ds.uuid && !helmImageCache[ds.uuid]) {
+      const img = new Image();
+      img.src = `https://minotar.net/helm/${ds.uuid.replace(/-/g,'')}/18`;
+      img.onload = () => { if (historyChart) historyChart.draw(); };
+      helmImageCache[ds.uuid] = img;
+    }
+  });
+
+  function applyHighlight(activeIdx) {
+    if (!historyChart) return;
+    historyChart.data.datasets.forEach((ds, i) => {
+      ds.borderWidth = i === activeIdx ? 3 : activeIdx === null ? 1.5 : 0.4;
+      ds.borderColor = (activeIdx === null || i === activeIdx) ? playerColor(ds.uuid) : playerColor(ds.uuid) + '44';
+    });
+    historyChart.update('none');
+    updateLegendHighlight(activeIdx);
+  }
+
+  const opts = chartBaseOpts();
+  historyChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { datasets },
+    plugins: isTop12 ? [helmPlugin] : [],
+    options: {
+      ...opts,
+      layout: { padding: { right: isTop12 ? 28 : 0 } },
+      plugins: {
+        ...opts.plugins,
+        legend: { display: false },
+        tooltip: { enabled: false },
+        zoom: !isTop12 ? {
+          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'y' },
+          pan:  { enabled: true, mode: 'y' },
+        } : {},
+      },
+      scales: {
+        ...opts.scales,
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'MMM d, HH:mm', displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' } },
+          ticks: { color: '#525861', font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 },
+          grid: { color: '#1e2022' },
+        },
+        y: { ...opts.scales.y, reverse: true, ticks: { ...opts.scales.y.ticks, callback: v => `#${v}` } },
+      },
+    },
+  });
+
+  // Hover: find nearest dataset to mouse position by y-distance
+  canvas.addEventListener('mousemove', e => {
+    if (frozenDatasetIndex !== null) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const mouseX = e.clientX - rect.left;
+    const chart = historyChart;
+    if (!chart) return;
+
+    let closest = null;
+    let closestDist = 30; // max px distance to trigger highlight
+
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      meta.data.forEach(pt => {
+        const dx = pt.x - mouseX;
+        const dy = pt.y - mouseY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < closestDist) { closestDist = dist; closest = i; }
+      });
+    });
+
+    applyHighlight(closest);
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    if (frozenDatasetIndex !== null) return;
+    applyHighlight(null);
+  });
+
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const mouseX = e.clientX - rect.left;
+    const chart = historyChart;
+    if (!chart) return;
+
+    let closest = null;
+    let closestDist = 30;
+
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      meta.data.forEach(pt => {
+        const dx = pt.x - mouseX;
+        const dy = pt.y - mouseY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < closestDist) { closestDist = dist; closest = i; }
+      });
+    });
+
+    if (closest === null) {
+      frozenDatasetIndex = null;
+      applyHighlight(null);
+    } else {
+      frozenDatasetIndex = frozenDatasetIndex === closest ? null : closest;
+      applyHighlight(frozenDatasetIndex);
+    }
+  });
+
+  // Legend interactions
+  legend.querySelectorAll('.hist-legend-item').forEach(el => {
+    const idx = parseInt(el.dataset.idx);
+    el.addEventListener('mouseenter', () => { if (frozenDatasetIndex !== null) return; applyHighlight(idx); });
+    el.addEventListener('mouseleave', () => { if (frozenDatasetIndex !== null) return; applyHighlight(null); });
+    el.addEventListener('click', () => {
+      frozenDatasetIndex = frozenDatasetIndex === idx ? null : idx;
+      applyHighlight(frozenDatasetIndex);
+    });
+  });
+}
+
+document.getElementById('hist-top12-btn').addEventListener('click', () => {
+  historyMode = 'top12';
+  document.getElementById('hist-top12-btn').classList.add('active');
+  document.getElementById('hist-top100-btn').classList.remove('active');
+  renderHistoryChart();
+});
+document.getElementById('hist-top100-btn').addEventListener('click', () => {
+  historyMode = 'top100';
+  document.getElementById('hist-top100-btn').classList.add('active');
+  document.getElementById('hist-top12-btn').classList.remove('active');
+  renderHistoryChart();
+});
+
+
+fetchAll(true);
+</script>
+</body>
+</html>
