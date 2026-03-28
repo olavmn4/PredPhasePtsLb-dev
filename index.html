@@ -1086,98 +1086,104 @@ function calcQualLikelihood(row) {
 
   const PLAYOFFS_TARGET = 159;
   const DECAY_PER_DAY   = 5;
-  const ELO_PER_RANK    = 10; // approximate elo between adjacent ranks
 
-  const currentPP  = row.currentPP  ?? 0;
-  const predPP     = row.predPP     ?? 0;
-  const eloRk      = row.eloRk      ?? 999;
-  const eloRate    = row.eloRate     ?? 0;
-  const uuid       = row.uuid;
+  const currentPP = row.currentPP ?? 0;
+  const predPP    = row.predPP    ?? 0;
+  const eloRk     = row.eloRk     ?? 999;
+  const eloRate   = row.eloRate   ?? 0;
+  const uuid      = row.uuid;
 
   const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
 
-  // Days remaining in P3 (use phaseEndsAt if available, else assume 14 days)
   const now = Math.floor(Date.now() / 1000);
-  const p3DaysLeft = phaseEndsAt
-    ? Math.max(0, (phaseEndsAt - now) / 86400)
-    : 14;
+  const p3DaysLeft = phaseEndsAt ? Math.max(0, (phaseEndsAt - now) / 86400) : 14;
 
-  // P4 is always one full phase (~30 days), assume full decay exposure
-  const p4DaysLeft = 30;
-
-  // ── Worst-case scenario: player only decays from here ──────────────────
-  // How much elo do they lose if they play zero games?
-  const p3EloDecay = p3DaysLeft * DECAY_PER_DAY;
-  const p4EloDecay = p4DaysLeft * DECAY_PER_DAY;
-
-  // What Elo rank would they be at if they only decay?
-  // Approximate: each rank gap is roughly ELO_PER_RANK elo
-  const p3WorstEloRk = Math.min(100, Math.round(eloRk + p3EloDecay / ELO_PER_RANK));
-  const p4WorstEloRk = Math.min(100, Math.round(eloRk + (p3EloDecay + p4EloDecay) / ELO_PER_RANK));
-
-  const p3WorstPts = p3Pts(p3WorstEloRk);
-  const p4WorstPts = p4Pts(p4WorstEloRk);
-  const worstCasePP = currentPP + p3WorstPts + p4WorstPts;
-
-  // Best case: they peak at rank 1 both phases
+  // Best possible PP (rank 1 both phases)
   const bestCasePP = currentPP + p3Pts(1) + p4Pts(1);
 
-  // ── Mathematically impossible ───────────────────────────────────────────
+  // Mathematically eliminated
   if (bestCasePP < PLAYOFFS_TARGET) {
-    return { pct: 0, label: 'eliminated', color: '#6b7280', factors: null };
+    return { pct: 0, label: 'eliminated', color: '#6b7280', lines: ['cannot reach 159 pts even at rank 1 both phases'] };
   }
 
-  // ── Core score: how much buffer do they have on worst-case decay? ───────
-  // If worstCasePP >= 159, they qualify even without playing another game
-  // Scale between 0 (need rank 1 both phases) and 95 (qualify with pure decay)
-  let pct;
-  const factors = {};
+  // ── Realistic case: finish P3 at current Elo rank, P4 at decay floor ────
+  // P3: assume they hold current rank (best realistic assumption mid-phase)
+  const realisticP3Pts = p3Pts(eloRk);
 
-  if (worstCasePP >= PLAYOFFS_TARGET) {
-    // Qualifies with pure decay — very safe. How much buffer?
-    const buffer = worstCasePP - PLAYOFFS_TARGET;
-    pct = Math.min(97, 80 + Math.round(buffer * 0.5));
-    factors.base = 'qualifies without playing';
-    factors.worstCasePP = worstCasePP;
-    factors.buffer = `+${buffer} pts buffer`;
-  } else {
-    // Needs to play. How much extra PP do they need beyond decay?
-    const shortfall = PLAYOFFS_TARGET - worstCasePP;
-    const totalAvailable = bestCasePP - worstCasePP;
+  // P4 decay floor: from current rank, decay 5/day for full P4 phase (~30 days)
+  // but clamp to rank 100 since below that gives 0 PP anyway
+  const p4DecayRanks = Math.round((30 * DECAY_PER_DAY) / 10); // ~15 rank drop
+  const p4FloorRk = Math.min(100, eloRk + p4DecayRanks);
+  const realisticP4Pts = p4Pts(p4FloorRk);
 
-    // ratio: 1 = needs almost nothing extra, 0 = needs everything to go perfectly
-    const ratio = Math.max(0, 1 - shortfall / totalAvailable);
+  const realisticPP = currentPP + realisticP3Pts + realisticP4Pts;
 
-    // Base score 5-75 depending on how achievable the shortfall is
-    pct = Math.round(5 + ratio * 70);
-
-    factors.base = 'needs to play';
-    factors.worstCasePP = worstCasePP;
-    factors.shortfall = `needs +${shortfall} pts beyond decay floor`;
-    factors.worstEloRanks = `decay floor: P3 rank ~${p3WorstEloRk}, P4 rank ~${p4WorstEloRk}`;
-  }
-
-  // ── Modifier: recent rank trend ─────────────────────────────────────────
+  // ── Elo trend from history ───────────────────────────────────────────────
   const hist = tsHistory[uuid] ?? [];
   const recent = hist.filter(p => p.t >= now - 7*24*3600);
+  let eloTrendPerDay = 0; // elo gained per day over last 7 days
+  let trendDays = 0;
   if (recent.length >= 2) {
-    const rankDelta = recent[0].ppRk - recent[recent.length-1].ppRk;
-    if      (rankDelta >= 5)  pct = Math.min(97, pct + 5);
-    else if (rankDelta >= 2)  pct = Math.min(97, pct + 2);
-    else if (rankDelta <= -5) pct = Math.max(1,  pct - 5);
-    else if (rankDelta <= -2) pct = Math.max(1,  pct - 2);
-    factors.trend = rankDelta >= 0 ? `↑ gained ${rankDelta} PP ranks this week` : `↓ lost ${Math.abs(rankDelta)} PP ranks this week`;
+    const oldest = recent[0];
+    const newest = recent[recent.length-1];
+    trendDays = (newest.t - oldest.t) / 86400;
+    if (trendDays > 0) {
+      // Use eloRate delta from snapshots if available, else infer from rank
+      const rankChange = oldest.ppRk - newest.ppRk; // positive = rising
+      eloTrendPerDay = rankChange > 0 ? 2 : rankChange < 0 ? -2 : 0; // rough elo/day
+    }
   }
 
-  // ── Modifier: activity (inactive players won't improve) ─────────────────
+  // Adjust realistic P3 pts based on trend
+  // If they're rising, assume they might gain a few ranks by phase end
+  const trendAdjustRanks = Math.round(Math.max(-8, Math.min(8, eloTrendPerDay * p3DaysLeft / 3)));
+  const trendAdjustedP3Rk = Math.max(1, Math.min(100, eloRk - trendAdjustRanks));
+  const trendAdjustedP3Pts = p3Pts(trendAdjustedP3Rk);
+  const trendAdjustedPP = currentPP + trendAdjustedP3Pts + realisticP4Pts;
+
+  const projectedPP = Math.round((realisticPP + trendAdjustedPP) / 2);
+
+  // ── Score: how far is projected PP from 159? ─────────────────────────────
+  const gap = PLAYOFFS_TARGET - projectedPP;
+
+  let pct;
+  const lines = [];
+
+  if (projectedPP >= PLAYOFFS_TARGET) {
+    // On track — how much buffer?
+    const buffer = projectedPP - PLAYOFFS_TARGET;
+    if (buffer >= 30)      pct = 95;
+    else if (buffer >= 15) pct = 88;
+    else if (buffer >= 5)  pct = 80;
+    else                   pct = 72;
+    lines.push(`projected ~${projectedPP} pts — on track (${buffer > 0 ? '+' : ''}${buffer} buffer)`);
+  } else {
+    // Not on track — how big is the gap?
+    // Scale: gap of 5 = ~55%, gap of 20 = ~25%, gap of 40+ = ~5%
+    pct = Math.max(3, Math.round(60 * Math.exp(-gap / 15)));
+    lines.push(`projected ~${projectedPP} pts — needs +${gap} more to qualify`);
+  }
+
+  // Trend line
+  if (recent.length >= 2) {
+    const rankDelta = recent[0].ppRk - recent[recent.length-1].ppRk;
+    if      (rankDelta >= 5)  lines.push(`↑ rising fast — gained ${rankDelta} PP ranks this week`);
+    else if (rankDelta >= 2)  lines.push(`↑ trending up — gained ${rankDelta} PP ranks this week`);
+    else if (rankDelta === 0) lines.push(`→ holding steady this week`);
+    else if (rankDelta >= -3) lines.push(`↓ slight drop — lost ${Math.abs(rankDelta)} PP ranks this week`);
+    else                      lines.push(`↓ falling — lost ${Math.abs(rankDelta)} PP ranks this week`);
+  }
+
+  // Decay floor info
+  lines.push(`decay floor: P3 rank ~${eloRk}, P4 rank ~${p4FloorRk} (−${p4DecayRanks} from decay)`);
+
+  // Activity warning
   if (row.lastPlayed) {
     const daysInactive = (now - row.lastPlayed) / 86400;
-    if (daysInactive > 14 && worstCasePP < PLAYOFFS_TARGET) {
-      pct = Math.max(1, pct - 15);
-      factors.activity = `inactive ${Math.round(daysInactive)}d — decay risk`;
-    } else if (daysInactive < 1) {
-      factors.activity = 'active today';
+    if (daysInactive > 7 && gap > 0) {
+      pct = Math.max(2, Math.round(pct * 0.6));
+      lines.push(`inactive ${Math.round(daysInactive)}d — decay risk, score penalised`);
     }
   }
 
@@ -1191,7 +1197,7 @@ function calcQualLikelihood(row) {
 
   const color = pct >= 65 ? 'var(--accent)' : pct >= 35 ? '#fbbf24' : '#f87171';
 
-  return { pct, label, color, factors };
+  return { pct, label, color, lines };
 }
 
 function renderQualLikelihood(row) {
@@ -1200,11 +1206,7 @@ function renderQualLikelihood(row) {
   const result = calcQualLikelihood(row);
   if (!result) { el.style.display = 'none'; return; }
 
-  const { pct, label, color, factors } = result;
-
-  const factorLines = factors ? Object.entries(factors).map(([k, v]) =>
-    `<div style="margin-top:3px">${v}</div>`
-  ).join('') : '';
+  const { pct, label, color, lines } = result;
 
   el.style.display = 'block';
   el.innerHTML = `
@@ -1216,8 +1218,8 @@ function renderQualLikelihood(row) {
     <div style="background:var(--bg3);height:4px;margin-bottom:12px;overflow:hidden">
       <div style="height:100%;width:${pct}%;background:${color};transition:width .4s"></div>
     </div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);line-height:1.7">
-      ${factorLines}
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);line-height:1.9">
+      ${lines.map(l => `<div>${l}</div>`).join('')}
     </div>
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--muted);margin-top:8px;opacity:.5">based on decay floor · target ~159 pts · ~5 elo/day decay assumed</div>
   `;
