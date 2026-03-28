@@ -1087,121 +1087,59 @@ function calcQualLikelihood(row) {
   if (!row) return null;
 
   const PLAYOFFS_TARGET = 159;
-  const DECAY_PER_DAY   = 5;
-
   const currentPP = row.currentPP ?? 0;
-  const predPP    = row.predPP    ?? 0;
-  const eloRk     = row.eloRk     ?? 999;
-  const eloRate   = row.eloRate   ?? 0;
-  const uuid      = row.uuid;
+  const eloRk     = row.eloRk ?? 999;
 
   const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
 
-  const now = Math.floor(Date.now() / 1000);
-  const p3DaysLeft = phaseEndsAt ? Math.max(0, (phaseEndsAt - now) / 86400) : 14;
-
-  // Best possible PP (rank 1 both phases)
+  // Mathematically eliminated?
   const bestCasePP = currentPP + p3Pts(1) + p4Pts(1);
-
-  // Mathematically eliminated
   if (bestCasePP < PLAYOFFS_TARGET) {
     return { pct: 0, label: 'eliminated', color: '#6b7280', lines: ['cannot reach 159 pts even at rank 1 both phases'] };
   }
 
-  // ── Realistic case: finish P3 at current Elo rank, P4 at decay floor ────
-  // P3: assume they hold current rank (best realistic assumption mid-phase)
-  const realisticP3Pts = p3Pts(eloRk);
-
-  // P4 decay floor: from current rank, decay 5/day for full P4 phase (~30 days)
-  // but clamp to rank 100 since below that gives 0 PP anyway
-  const p4DecayRanks = Math.round((30 * DECAY_PER_DAY) / 10); // ~15 rank drop
-  const p4FloorRk = Math.min(100, eloRk + p4DecayRanks);
-  const realisticP4Pts = p4Pts(p4FloorRk);
-
-  const realisticPP = currentPP + realisticP3Pts + realisticP4Pts;
-
-  // ── Elo trend from history ───────────────────────────────────────────────
-  const hist = tsHistory[uuid] ?? [];
-  const recent = hist.filter(p => p.t >= now - 7*24*3600);
-  let eloTrendPerDay = 0; // elo gained per day over last 7 days
-  let trendDays = 0;
-  if (recent.length >= 2) {
-    const oldest = recent[0];
-    const newest = recent[recent.length-1];
-    trendDays = (newest.t - oldest.t) / 86400;
-    if (trendDays > 0) {
-      // Use eloRate delta from snapshots if available, else infer from rank
-      const rankChange = oldest.ppRk - newest.ppRk; // positive = rising
-      eloTrendPerDay = rankChange > 0 ? 2 : rankChange < 0 ? -2 : 0; // rough elo/day
-    }
-  }
-
-  // Adjust realistic P3 pts based on trend
-  // If they're rising, assume they might gain a few ranks by phase end
-  const trendAdjustRanks = Math.round(Math.max(-8, Math.min(8, eloTrendPerDay * p3DaysLeft / 3)));
-  const trendAdjustedP3Rk = Math.max(1, Math.min(100, eloRk - trendAdjustRanks));
-  const trendAdjustedP3Pts = p3Pts(trendAdjustedP3Rk);
-  const trendAdjustedPP = currentPP + trendAdjustedP3Pts + realisticP4Pts;
-
-  const projectedPP = Math.round((realisticPP + trendAdjustedPP) / 2);
-
-  // ── Score: how far is projected PP from 159? ─────────────────────────────
-  const gap = PLAYOFFS_TARGET - projectedPP;
+  // Realistic total: hold current Elo rank for both remaining phases
+  const realisticPP = currentPP + p3Pts(eloRk) + p4Pts(eloRk);
+  const buffer = realisticPP - PLAYOFFS_TARGET;
+  const lines = [`projected ${realisticPP} pts holding elo rank ${eloRk} (target: ${PLAYOFFS_TARGET})`];
 
   let pct;
-  const lines = [];
+  if (buffer >= 60)       pct = 97;
+  else if (buffer >= 40)  pct = 93;
+  else if (buffer >= 25)  pct = 88;
+  else if (buffer >= 15)  pct = 82;
+  else if (buffer >= 8)   pct = 74;
+  else if (buffer >= 3)   pct = 65;
+  else if (buffer >= 0)   pct = 55;
+  else if (buffer >= -5)  pct = 38;
+  else if (buffer >= -12) pct = 25;
+  else if (buffer >= -20) pct = 15;
+  else if (buffer >= -30) pct = 8;
+  else if (buffer >= -45) pct = 4;
+  else                    pct = 2;
 
-  if (projectedPP >= PLAYOFFS_TARGET) {
-    const buffer = projectedPP - PLAYOFFS_TARGET;
-    if (buffer >= 40)      pct = 98;
-    else if (buffer >= 20) pct = 95;
-    else if (buffer >= 10) pct = 90;
-    else if (buffer >= 3)  pct = 82;
-    else                   pct = 74;
-    lines.push(`projected ~${projectedPP} pts — on track (+${buffer} buffer)`);
+  if (buffer >= 0) {
+    lines.push(`+${buffer} pts buffer above target`);
   } else {
-    const gap = PLAYOFFS_TARGET - projectedPP;
-    // Very steep drop-off — gap of 5 = ~35%, gap of 15 = ~12%, gap of 30+ = ~3%
-    pct = Math.max(2, Math.round(40 * Math.exp(-gap / 8)));
-    lines.push(`projected ~${projectedPP} pts — needs +${gap} more to qualify`);
-  }
-
-  // Trend line
-  if (recent.length >= 2) {
-    const rankDelta = recent[0].ppRk - recent[recent.length-1].ppRk;
-    if      (rankDelta >= 5)  lines.push(`↑ rising fast — gained ${rankDelta} PP ranks this week`);
-    else if (rankDelta >= 2)  lines.push(`↑ trending up — gained ${rankDelta} PP ranks this week`);
-    else if (rankDelta === 0) lines.push(`→ holding steady this week`);
-    else if (rankDelta >= -3) lines.push(`↓ slight drop — lost ${Math.abs(rankDelta)} PP ranks this week`);
-    else                      lines.push(`↓ falling — lost ${Math.abs(rankDelta)} PP ranks this week`);
-  }
-
-  // Decay floor info
-  lines.push(`decay floor: P3 rank ~${eloRk}, P4 rank ~${p4FloorRk} (−${p4DecayRanks} from decay)`);
-
-  // Activity warning
-  if (row.lastPlayed) {
-    const daysInactive = (now - row.lastPlayed) / 86400;
-    if (daysInactive > 7 && gap > 0) {
-      pct = Math.max(2, Math.round(pct * 0.6));
-      lines.push(`inactive ${Math.round(daysInactive)}d — decay risk, score penalised`);
+    lines.push(`${buffer} pts short — needs to improve Elo rank`);
+    // Show what rank they'd need to hold in P4 to still qualify given P3 at current rank
+    const afterP3 = currentPP + p3Pts(eloRk);
+    const neededP4 = PLAYOFFS_TARGET - afterP3;
+    for (let r = 100; r >= 1; r--) {
+      if (p4Pts(r) >= neededP4) {
+        lines.push(`need P4 rank ≤${r} (currently ${eloRk})`);
+        break;
+      }
     }
   }
 
   pct = Math.min(97, Math.max(1, pct));
-
-  const label = pct >= 85 ? 'very likely'
-    : pct >= 65 ? 'likely'
-    : pct >= 40 ? 'possible'
-    : pct >= 15 ? 'unlikely'
-    : 'very unlikely';
-
+  const label = pct >= 85 ? 'very likely' : pct >= 65 ? 'likely' : pct >= 40 ? 'possible' : pct >= 15 ? 'unlikely' : 'very unlikely';
   const color = pct >= 65 ? 'var(--accent)' : pct >= 35 ? '#fbbf24' : '#f87171';
 
   return { pct, label, color, lines };
 }
-
 let qualScoreCache = {}; // uuid → normalized pct (sums to 1200 across all players)
 
 function buildQualScores() {
