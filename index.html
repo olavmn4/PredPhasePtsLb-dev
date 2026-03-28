@@ -321,6 +321,7 @@
             <th data-col="elo" class="num">elo<span class="sort-icon">↕</span></th>
             <th data-col="eloRank" class="num">elo rank<span class="sort-icon">↕</span></th>
             <th class="no-sort">to qualify</th>
+            <th class="no-sort num">qual %</th>
             <th data-col="lastPlayed" class="num">last played<span class="sort-icon">↕</span></th>
           </tr>
         </thead>
@@ -822,6 +823,7 @@ function renderTable() {
       <td class="num"><span class="mono" style="font-weight:500;color:${eloColor(u.eloRate)}">${u.eloRate ?? '—'}</span></td>
       <td class="num"><span class="mono" style="color:var(--muted);font-size:12px">${u.eloRk ?? '—'}</span></td>
       <td>${qualPill(u.qualData)}</td>
+      <td class="num">${(() => { const r = calcQualLikelihood(u); const p = qualScoreCache[u.uuid] ?? r?.pct ?? 0; const c = p >= 65 ? 'var(--accent)' : p >= 35 ? '#fbbf24' : '#f87171'; return `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;color:${c}">${p}%</span>`; })()}</td>
       <td class="num"><span class="mono last-played-cell" style="font-size:11px;color:var(--muted)">${fmtAgo(u.lastPlayed)}</span></td>
     </tr>`;
 
@@ -831,7 +833,7 @@ function renderTable() {
         if (u.predPP >= playoffsThresholdPP && (!next || next.predPP < playoffsThresholdPP)) {
           shownPlayoffs = true;
           html += `<tr class="threshold-row threshold-playoffs">
-            <td colspan="10">── top 12 · auto-qualify for playoffs ──────────────────────────────────</td>
+            <td colspan="11">── top 12 · auto-qualify for playoffs ──────────────────────────────────</td>
           </tr>`;
         }
       }
@@ -839,7 +841,7 @@ function renderTable() {
         if (u.predPP >= lcqThresholdPP && (!next || next.predPP < lcqThresholdPP)) {
           shownLCQ = true;
           html += `<tr class="threshold-row threshold-lcq">
-            <td colspan="10">── top 100 · invited to last-chance qualifier (lcq) ──────────────────</td>
+            <td colspan="11">── top 100 · invited to last-chance qualifier (lcq) ──────────────────</td>
           </tr>`;
         }
       }
