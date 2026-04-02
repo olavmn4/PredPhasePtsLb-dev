@@ -469,6 +469,7 @@
       <button class="chart-tab" data-chart="pprank">PP rank</button>
       <button class="chart-tab" data-chart="phase">Phase points</button>
       <button id="modal-load-all-matches" style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10px;background:none;border:1px solid var(--border);color:var(--muted);padding:3px 8px;cursor:pointer">load all S10 matches</button>
+      <button id="modal-elo-time-toggle" style="font-family:'IBM Plex Mono',monospace;font-size:10px;background:none;border:1px solid var(--border);color:var(--muted);padding:3px 8px;cursor:pointer" title="toggle between match index and time axis">by match</button>
     </div>
     <div id="modal-chart-wrap">
       <div class="state-msg" id="modal-chart-loading"><div class="spinner"></div>loading…</div>
@@ -672,7 +673,14 @@ function buildMerged() {
           const boundaryNewElo = eloByRank[boundaryNewEloRk] ?? 0;
           const targetElo      = eloByRank[r] ?? 0;
           if (targetElo > boundaryNewElo) {
-            return { gap: Math.max(0, targetElo - eloRate), rank: r };
+            // Need strictly more elo than boundary — if already at targetElo, need +1 to reach rank above
+            if (targetElo > eloRate) {
+              return { gap: targetElo - eloRate, rank: r };
+            } else {
+              // Already at this rank's elo — need to reach the rank above
+              const aboveElo = eloByRank[r - 1] ?? targetElo + 1;
+              return { gap: aboveElo - eloRate, rank: r - 1 };
+            }
           }
         }
       }
@@ -690,28 +698,7 @@ function buildMerged() {
 
     } else if (lcqThresholdPP !== null && predPP >= lcqThresholdPP) {
       const { gap, rank } = simulateQual(12);
-      let playoffsChanceData = null;
-      if (gap === null) {
-        const PLAYOFFS_TARGET = 159;
-        const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
-        const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
-        const bestCase = currentPP + p3Pts(1) + p4Pts(1);
-        if (bestCase >= PLAYOFFS_TARGET) {
-          let neededRank = null;
-          for (let r = 100; r >= 1; r--) {
-            if (currentPP + p3Pts(r) + p4Pts(1) >= PLAYOFFS_TARGET) {
-              neededRank = r;
-              break;
-            }
-          }
-          if (neededRank !== null) {
-            const neededElo = eloByRank[neededRank] ?? 0;
-            const eloGap = Math.max(0, neededElo - eloRate);
-            playoffsChanceData = { neededRank, eloGap };
-          }
-        }
-      }
-      qualData = { type:'po', gap, rank, playoffsChanceData };
+      qualData = { type:'po', gap, rank };
 
     } else {
       const { gap, rank } = simulateQual(100);
@@ -723,6 +710,7 @@ function buildMerged() {
       nickname: u.nickname,
       country: u.country,
       eloRate, eloRk,
+      correctedEloRk: correctedRankMap[u.uuid] ?? eloRk,
       currentPP, predPP, gain,
       ppRk,
       qualData,
@@ -762,16 +750,8 @@ function qualPill(q) {
 
   let mainPill;
   if (q.gap === null) {
-    if (q.type === 'po' && q.playoffsChanceData) {
-      const { neededRank, eloGap } = q.playoffsChanceData;
-      const gapStr = eloGap > 0 ? `+${eloGap} elo` : '+0 elo';
-      mainPill = `<span class="qual-pill ${klass}">→ Playoffs <span style="opacity:.7">needs ${gapStr} this phase for playoffs chance</span><span style="opacity:.4"> (rank ${neededRank})</span></span>`;
-    } else if (q.type === 'po') {
-      mainPill = `<span class="qual-pill ${klass}">→ Playoffs <span style="opacity:.55">unreachable</span></span>`;
-    } else {
-      const msg = q.type === 'seed' ? 'unreachable' : 'unreachable this phase';
-      mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.55">${msg}</span></span>`;
-    }
+    const msg = q.type === 'seed' ? 'unreachable' : 'unreachable this phase';
+    mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.55">${msg}</span></span>`;
   } else if (q.gap === 0) {
     mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.7">qualified</span></span>`;
   } else {
@@ -1276,9 +1256,11 @@ async function openModal(uuid) {
   document.body.style.overflow = 'hidden';
 
   // Reset match toggle state for every new player
-  modalMatches = []; modalAllMatchesLoaded = false; showAllMatches = false;
+  modalMatches = []; modalAllMatchesLoaded = false; showAllMatches = false; eloChartTimeMode = false;
   const loadBtn = document.getElementById('modal-load-all-matches');
   if (loadBtn) { loadBtn.textContent = 'load all S10 matches'; loadBtn.disabled = false; loadBtn.style.color = 'var(--muted)'; }
+  const timeBtn = document.getElementById('modal-elo-time-toggle');
+  if (timeBtn) { timeBtn.textContent = 'by match'; timeBtn.style.color = 'var(--muted)'; }
 
   document.getElementById('modal-stats-grid').innerHTML = '';
   document.getElementById('modal-qual-path').classList.remove('visible');
@@ -1366,7 +1348,8 @@ function renderQualPath(row) {
 
   const PLAYOFFS_TARGET = 159;
   const currentPP = row.currentPP ?? 0;
-  const currentP3Rank = row.eloRk;
+  const currentP3Rank = row.correctedEloRk ?? row.eloRk;
+  const currentElo = row.eloRate ?? 0;
 
   const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
@@ -1388,7 +1371,9 @@ function renderQualPath(row) {
         worstP4 = 'unreachable';
       }
     }
-    rows.push({ r3, ppAfterP3, worstP4, isCurrent: r3 === currentP3Rank });
+    const rankElo = eloByRank[r3] ?? 0;
+    const eloGap = r3 === currentP3Rank ? 0 : rankElo > currentElo ? rankElo - currentElo : -(currentElo - rankElo);
+    rows.push({ r3, ppAfterP3, worstP4, eloGap, isCurrent: r3 === currentP3Rank });
   }
 
   el.innerHTML = `
@@ -1396,20 +1381,24 @@ function renderQualPath(row) {
     <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border)">
       <table class="qual-path-table" style="width:100%">
         <thead style="position:sticky;top:0;background:var(--bg2)">
-          <tr><th>P3 elo rank</th><th>pts after P3</th><th>worst P4 rank for playoffs</th></tr>
+          <tr><th>P3 elo rank</th><th>elo gap</th><th>pts after P3</th><th>worst P4 rank for playoffs</th></tr>
         </thead>
-        <tbody id="qual-path-tbody">${rows.map(r => `
+        <tbody id="qual-path-tbody">${rows.map(r => {
+          const gapStr = r.eloGap === 0 ? '—' : r.eloGap > 0 ? `+${r.eloGap}` : `${r.eloGap}`;
+          const gapColor = r.eloGap === 0 ? 'var(--accent)' : r.eloGap > 0 ? 'var(--muted)' : '#4ade80';
+          return `
           <tr class="${r.isCurrent ? 'current-row' : ''}" ${r.isCurrent ? 'id="qual-path-current"' : ''}>
             <td>${r.isCurrent ? '→ ' : ''}${r.r3}</td>
+            <td style="color:${gapColor}">${gapStr}</td>
             <td>${r.ppAfterP3}</td>
             <td>${r.worstP4}</td>
-          </tr>`).join('')}
+          </tr>`;
+        }).join('')}
         </tbody>
       </table>
     </div>`;
   el.classList.add('visible');
 
-  // Scroll to current rank row
   setTimeout(() => {
     const cur = document.getElementById('qual-path-current');
     if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -1516,12 +1505,12 @@ function renderChart(uuid, type, row) {
     const phaseLines = S10_PHASE_ENDS.map((ph, i) => {
       const idx = filteredDates.findIndex(d => d > ph.t);
       if (idx < 0) return null;
-      // Only show if the phase end actually falls within the visible date range
       const firstDate = filteredDates[0];
       const lastDate = filteredDates[filteredDates.length - 1];
       if (ph.t < firstDate || ph.t > lastDate) return null;
       const eloAtEnd = idx > 0 ? filteredData[idx - 1] : null;
-      return { ph, idx, eloAtEnd, color: phaseColors[i], fromTop: i % 2 === 0 };
+      const xValue = eloChartTimeMode ? ph.t * 1000 : idx;
+      return { ph, idx, xValue, eloAtEnd, color: phaseColors[i], fromTop: i % 2 === 0 };
     }).filter(Boolean);
 
     const phaseDrawPlugin = {
@@ -1531,8 +1520,8 @@ function renderChart(uuid, type, row) {
         const { top, bottom } = chart.chartArea;
         const xScale = chart.scales.x;
 
-        phaseLines.forEach(({ ph, idx, eloAtEnd, color, fromTop }) => {
-          const x = xScale.getPixelForValue(idx);
+        phaseLines.forEach(({ ph, xValue, eloAtEnd, color, fromTop }) => {
+          const x = xScale.getPixelForValue(xValue);
           if (x < chart.chartArea.left || x > chart.chartArea.right) return;
 
           // Draw dashed line
@@ -1613,8 +1602,8 @@ function renderChart(uuid, type, row) {
     modalChart = new Chart(ctx, {
       type: 'line',
       plugins: [phaseDrawPlugin, phaseTooltipPlugin],
-      data: { labels: filteredLabels, datasets: [{
-        data: filteredData,
+      data: { labels: eloChartTimeMode ? undefined : filteredLabels, datasets: [{
+        data: eloChartTimeMode ? filteredDates.map((d, i) => ({ x: d * 1000, y: filteredData[i] })) : filteredData,
         borderColor: ctx => {
           const v = ctx.p1?.parsed?.y;
           return v != null ? tierColor(v) : '#4ade80';
@@ -1631,12 +1620,20 @@ function renderChart(uuid, type, row) {
         plugins: {
           ...opts.plugins,
           tooltip: { ...opts.plugins.tooltip, callbacks: {
-            title: i => `Match ${i[0].dataIndex + 1}  ·  ${i[0].label}`,
-            label: i => ` ${i.raw} elo`,
+            title: i => eloChartTimeMode
+              ? new Date(i[0].parsed.x).toLocaleDateString('en-GB', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' })
+              : `Match ${i[0].dataIndex + 1}  ·  ${i[0].label}`,
+            label: i => ` ${eloChartTimeMode ? i.parsed.y : i.raw} elo`,
           }},
         },
         scales: {
           ...opts.scales,
+          x: eloChartTimeMode ? {
+            type: 'time',
+            time: { tooltipFormat: 'MMM d, HH:mm', displayFormats: { hour: 'MMM d HH:mm', day: 'MMM d' } },
+            ticks: { color: '#525861', font: { family: 'IBM Plex Mono', size: 10 }, maxRotation: 0 },
+            grid: { color: '#1e2022' },
+          } : opts.scales.x,
           y: {
             ...opts.scales.y,
             afterDataLimits: scale => {
@@ -1730,27 +1727,64 @@ function renderChart(uuid, type, row) {
 
   } else if (type === 'phase') {
     const phases = modalUser?.seasonResult?.phases ?? [];
-    const p1 = phases.find(p=>p.phase===1)?.point ?? 0;
-    const p2 = phases.find(p=>p.phase===2)?.point ?? 0;
-    const p3gain = row?.gain ?? 0;
-    const mss = Math.max(0, (row?.predPP ?? 0) - p1 - p2 - p3gain);
-    const labels = ['Phase 1','Phase 2', ...(mss > 0 ? ['MSS'] : []), 'Phase 3 (pred)'];
-    const data   = [p1, p2, ...(mss > 0 ? [mss] : []), p3gain];
+    const p1    = phases.find(p=>p.phase===1)?.point ?? 0;
+    const p2    = phases.find(p=>p.phase===2)?.point ?? 0;
+    const p3api = phases.find(p=>p.phase===3)?.point ?? null;
+    const p3    = p3api !== null ? p3api : (row?.gain ?? 0);
+    const p3ended = p3api !== null;
+
+    // MSS: pts not attributable to any phase (tournament bonus pts)
+    // = total locked pts minus all phase pts
+    const lockedTotal = modalUser?.seasonResult?.last?.phasePoint ?? (p1 + p2 + p3);
+    const mss = Math.max(0, lockedTotal - p1 - p2 - p3);
+
+    // P4: predPP - everything already locked
+    const p4pred = Math.max(0, (row?.predPP ?? 0) - lockedTotal);
+
+    const labels = [
+      'P1',
+      'P2',
+      ...(mss > 0 ? ['MSS'] : []),
+      p3ended ? 'P3' : 'P3 (pred)',
+      p3ended ? 'P4 (pred)' : '',
+    ].filter(Boolean);
+
+    const data = [
+      p1,
+      p2,
+      ...(mss > 0 ? [mss] : []),
+      p3,
+      ...(p3ended ? [p4pred] : []),
+    ];
+
     const colors = [
-      'rgba(74,222,128,.6)', 'rgba(74,222,128,.6)',
-      ...(mss > 0 ? ['rgba(251,191,36,.6)'] : []),
+      'rgba(74,222,128,.7)',
+      'rgba(74,222,128,.7)',
+      ...(mss > 0 ? ['rgba(251,191,36,.7)'] : []),
+      p3ended ? 'rgba(74,222,128,.7)' : 'rgba(74,222,128,.35)',
       'rgba(74,222,128,.25)',
     ];
+
     modalChart = new Chart(ctx, {
       type: 'bar',
       data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 0 }]},
-      options: { ...opts, scales: { ...opts.scales, y: { ...opts.scales.y, beginAtZero: true }}},
+      options: {
+        ...opts,
+        plugins: {
+          ...opts.plugins,
+          tooltip: { ...opts.plugins.tooltip, callbacks: {
+            label: i => ` ${i.raw} pts`,
+          }},
+        },
+        scales: { ...opts.scales, y: { ...opts.scales.y, beginAtZero: true }},
+      },
     });
   }
 }
 
 let modalAllMatchesLoaded = false;
 let showAllMatches = false;
+let eloChartTimeMode = false; // false = by match index, true = by real time
 
 // Approximate S10 phase end timestamps (unix seconds)
 const S10_PHASE_ENDS = [
@@ -1799,6 +1833,16 @@ document.getElementById('modal-load-all-matches').addEventListener('click', () =
     btn.style.color = showAllMatches ? 'var(--accent)' : 'var(--muted)';
     renderChart(uuid, activeChartTab, mergedData.find(u => u.uuid === uuid) ?? null);
   }
+});
+
+document.getElementById('modal-elo-time-toggle').addEventListener('click', () => {
+  const uuid = modalUser?.uuid;
+  if (!uuid || activeChartTab !== 'elo') return;
+  eloChartTimeMode = !eloChartTimeMode;
+  const btn = document.getElementById('modal-elo-time-toggle');
+  btn.textContent = eloChartTimeMode ? 'by time' : 'by match';
+  btn.style.color = eloChartTimeMode ? 'var(--accent)' : 'var(--muted)';
+  renderChart(uuid, 'elo', mergedData.find(u => u.uuid === uuid) ?? null);
 });
 
 document.querySelectorAll('.chart-tab').forEach(tab => {
