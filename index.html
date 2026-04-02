@@ -1501,6 +1501,7 @@ function renderChart(uuid, type, row) {
     const visibleTiers = TIERS.filter(t => t.min >= minVal - 200 && t.min <= maxVal + 200);
 
     const phaseColors = ['#60a5fa', '#f59e0b', '#a78bfa']; // P1, P2, P3
+    const phaseApiData = modalUser?.seasonResult?.phases ?? [];
 
     const phaseLines = S10_PHASE_ENDS.map((ph, i) => {
       const idx = filteredDates.findIndex(d => d > ph.t);
@@ -1510,7 +1511,9 @@ function renderChart(uuid, type, row) {
       if (ph.t < firstDate || ph.t > lastDate) return null;
       const eloAtEnd = idx > 0 ? filteredData[idx - 1] : null;
       const xValue = eloChartTimeMode ? ph.t * 1000 : idx;
-      return { ph, idx, xValue, eloAtEnd, color: phaseColors[i], fromTop: i % 2 === 0 };
+      const phaseInfo = phaseApiData.find(p => p.phase === ph.phase);
+      const rankAtEnd = phaseInfo?.eloRank ?? null;
+      return { ph, idx, xValue, eloAtEnd, rankAtEnd, color: phaseColors[i], fromTop: i % 2 === 0 };
     }).filter(Boolean);
 
     const phaseDrawPlugin = {
@@ -1520,7 +1523,7 @@ function renderChart(uuid, type, row) {
         const { top, bottom } = chart.chartArea;
         const xScale = chart.scales.x;
 
-        phaseLines.forEach(({ ph, xValue, eloAtEnd, color, fromTop }) => {
+        phaseLines.forEach(({ ph, xValue, eloAtEnd, rankAtEnd, color, fromTop }) => {
           const x = xScale.getPixelForValue(xValue);
           if (x < chart.chartArea.left || x > chart.chartArea.right) return;
 
@@ -1540,11 +1543,14 @@ function renderChart(uuid, type, row) {
           // Label box — alternate top/bottom
           const label = ph.label;
           const subLabel = eloAtEnd ? `${eloAtEnd} elo` : '';
+          const rankLabel = rankAtEnd ? `rank ${rankAtEnd}` : '';
+          const lines = [label, subLabel, rankLabel].filter(Boolean);
           ctx2.font = "bold 9px 'IBM Plex Mono', monospace";
-          const lw = Math.max(ctx2.measureText(label).width, ctx2.measureText(subLabel).width);
+          const lw = Math.max(...lines.map(l => ctx2.measureText(l).width));
           const pad = 6;
           const bw = lw + pad * 2;
-          const bh = subLabel ? 30 : 18;
+          const lineH = 12;
+          const bh = pad + lines.length * lineH;
           let bx = x + 5;
           if (bx + bw > chart.chartArea.right) bx = x - bw - 5;
           const by = fromTop ? top + 6 : bottom - bh - 6;
@@ -1559,16 +1565,12 @@ function renderChart(uuid, type, row) {
           ctx2.stroke();
 
           // Label text
-          ctx2.fillStyle = color;
           ctx2.textBaseline = 'top';
-          ctx2.font = "bold 9px 'IBM Plex Mono', monospace";
-          ctx2.fillText(label, bx + pad, by + 5);
-
-          if (subLabel) {
-            ctx2.fillStyle = 'rgba(255,255,255,0.6)';
-            ctx2.font = "9px 'IBM Plex Mono', monospace";
-            ctx2.fillText(subLabel, bx + pad, by + 17);
-          }
+          lines.forEach((line, li) => {
+            ctx2.font = li === 0 ? "bold 9px 'IBM Plex Mono', monospace" : "9px 'IBM Plex Mono', monospace";
+            ctx2.fillStyle = li === 0 ? color : 'rgba(255,255,255,0.55)';
+            ctx2.fillText(line, bx + pad, by + pad / 2 + li * lineH);
+          });
 
           ctx2.restore();
         });
@@ -1741,11 +1743,15 @@ function renderChart(uuid, type, row) {
     // P4: predPP - everything already locked
     const p4pred = Math.max(0, (row?.predPP ?? 0) - lockedTotal);
 
+    const p1rank = phases.find(p=>p.phase===1)?.eloRank;
+    const p2rank = phases.find(p=>p.phase===2)?.eloRank;
+    const p3rank = phases.find(p=>p.phase===3)?.eloRank;
+
     const labels = [
-      'P1',
-      'P2',
+      p1rank ? `P1 (rank ${p1rank})` : 'P1',
+      p2rank ? `P2 (rank ${p2rank})` : 'P2',
       ...(mss > 0 ? ['MSS'] : []),
-      p3ended ? 'P3' : 'P3 (pred)',
+      p3ended ? (p3rank ? `P3 (rank ${p3rank})` : 'P3') : 'P3 (pred)',
       p3ended ? 'P4 (pred)' : '',
     ].filter(Boolean);
 
