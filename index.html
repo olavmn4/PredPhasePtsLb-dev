@@ -518,6 +518,10 @@ const PP_TABLE = [
   [97,3,3,4,5],[98,3,3,4,5],[99,3,3,4,5],[100,3,3,4,5],
 ];
 const p3Points = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+const p4Points = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+const P3_ENDED = Math.floor(Date.now() / 1000) > 1775088000;
+// Use the current active phase's points table for qual calculations
+const currentPhasePoints = P3_ENDED ? p4Points : p3Points;
 
 document.getElementById('pp-ref-tbody').innerHTML =
   PP_TABLE.map(([r,p1,p2,p3,p4]) =>
@@ -660,10 +664,10 @@ function buildMerged() {
       const boundaryEloRk     = correctedRankMap[boundaryUuid] ?? eloMap[boundaryUuid]?.eloRank ?? targetPosition;
 
       for (let r = simEloRk; r >= 1; r--) {
-        const myNewPredPP = currentPP + p3Points(r);
+        const myNewPredPP = currentPP + currentPhasePoints(r);
         let boundaryNewEloRk = boundaryEloRk;
         if (boundaryEloRk >= r && boundaryEloRk < simEloRk) boundaryNewEloRk = boundaryEloRk + 1;
-        const boundaryNewPredPP = boundaryCurrentPP + p3Points(boundaryNewEloRk);
+        const boundaryNewPredPP = boundaryCurrentPP + currentPhasePoints(boundaryNewEloRk);
 
         if (myNewPredPP > boundaryNewPredPP) {
           const targetElo = eloByRank[r] ?? 0;
@@ -1351,7 +1355,7 @@ function renderQualPath(row) {
   const currentP3Rank = row.correctedEloRk ?? row.eloRk;
   const currentElo = row.eloRate ?? 0;
 
-  const p3Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][3] : 0;
+  const p3Pts = currentPhasePoints;
   const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
 
   const rows = [];
