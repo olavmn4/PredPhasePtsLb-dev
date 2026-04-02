@@ -294,7 +294,7 @@
   <div class="header-inner">
     <div class="header-top">
       <h1>MCSR Ranked</h1>
-      <span class="season-tag">S10 · Phase 3</span>
+      <span class="season-tag">S10 · Phase 4</span>
     </div>
     <div class="header-meta">
       <span class="live-dot"><span class="dot"></span> live</span>
@@ -378,6 +378,8 @@
     <div class="about-content">
       <h2>MCSR Ranked S10 Phase Points Tracker</h2>
       Each season is split into 4 monthly phases. Your Elo rank at phase end earns Phase Points which accumulate across all phases. MSS tournament points are included in current totals.
+      <br><br>
+      P1, P2, and P3 are now locked. We are currently in <strong>Phase 4</strong> — the final phase of Season 10.
 
       <h2>qualification</h2>
       <div class="legend">
@@ -401,15 +403,15 @@
       · <strong>Rank 2–12</strong> — Elo needed to move up one seed (beat the player above)<br>
       · <strong>Rank 1</strong> — nothing to gain<br>
       <br>
-      The gap is calculated using the Phase 3 points table: we find the lowest Elo rank at which
-      <code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent)">currentPP + phase3Points[rank]</code>
+      The gap is calculated using the Phase 4 points table: we find the lowest Elo rank at which
+      <code style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent)">currentPP + phase4Points[rank]</code>
       meets the target, then show the Elo difference to the player currently at that rank.
 
       <h2>phase points table</h2>
       <div class="pp-table-wrap">
         <table class="pp-table">
           <thead>
-            <tr><th>Rank</th><th>Phase 1</th><th>Phase 2</th><th class="cur-phase">Phase 3</th><th>Phase 4</th></tr>
+            <tr><th>Rank</th><th>Phase 1</th><th>Phase 2</th><th>Phase 3</th><th class="cur-phase">Phase 4</th></tr>
           </thead>
           <tbody id="pp-ref-tbody"></tbody>
         </table>
@@ -480,7 +482,7 @@
 
 
 <footer>
-  <span>MCSR Ranked S10 · Phase Points Leaderboard</span>
+  <span>MCSR Ranked S10 · Phase 4 · Phase Points Leaderboard</span>
   <span>data: <a href="https://api.mcsrranked.com" target="_blank">api.mcsrranked.com</a></span>
 </footer>
 
@@ -532,6 +534,7 @@ document.getElementById('pp-ref-tbody').innerHTML =
 
 let rawElo      = [];
 let eloByRank   = {};
+let playoffsCutoffPP = 159; // updated from live data in buildMerged
 let phaseEndsAt = null;
 let sortState   = { col:'ppRank', asc:true };
 let filterMode  = 'all';
@@ -625,6 +628,7 @@ function buildMerged() {
 
   const lcqThresholdPP    = sorted.length >= 100 ? sorted[99].predPhasePoint : null;
   const playoffsThresholdPP = sorted.length >= 12  ? sorted[11].predPhasePoint : null;
+  if (playoffsThresholdPP !== null) playoffsCutoffPP = playoffsThresholdPP;
 
   const phaseUuids = new Set(rawPhase.map(u => u.uuid));
   const zeroPPPlayers = visibleElo
@@ -754,7 +758,7 @@ function qualPill(q) {
 
   let mainPill;
   if (q.gap === null) {
-    const msg = q.type === 'seed' ? 'unreachable' : 'unreachable this phase';
+    const msg = q.type === 'seed' ? 'unreachable' : 'currently unreachable';
     mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.55">${msg}</span></span>`;
   } else if (q.gap === 0) {
     mainPill = `<span class="qual-pill ${klass}">${label} <span style="opacity:.7">qualified</span></span>`;
@@ -1350,59 +1354,101 @@ function renderQualPath(row) {
   const el = document.getElementById('modal-qual-path');
   if (!row || row._isZeroPP) { el.classList.remove('visible'); return; }
 
-  const PLAYOFFS_TARGET = 159;
-  const currentPP = row.currentPP ?? 0;
-  const currentP3Rank = row.correctedEloRk ?? row.eloRk;
+  const PLAYOFFS_TARGET = playoffsCutoffPP;
+  const currentPP  = row.currentPP ?? 0;
+  const currentRk  = row.correctedEloRk ?? row.eloRk;
   const currentElo = row.eloRate ?? 0;
 
-  const p3Pts = currentPhasePoints;
-  const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+  if (P3_ENDED) {
+    // P4 mode: show what total pts they'd reach at each P4 elo rank
+    const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+    const bestCase = currentPP + p4Pts(1);
 
-  const rows = [];
-  for (let r3 = 1; r3 <= 100; r3++) {
-    const ppAfterP3 = currentPP + p3Pts(r3);
-    const needed = PLAYOFFS_TARGET - ppAfterP3;
-    let worstP4;
-    if (needed <= 0) {
-      worstP4 = '✓ qualified';
-    } else {
-      worstP4 = null;
-      for (let r4 = 100; r4 >= 1; r4--) {
-        if (p4Pts(r4) >= needed) { worstP4 = `rank ${r4}`; break; }
-      }
-      if (!worstP4) {
-        if (r3 !== currentP3Rank) continue;
-        worstP4 = 'unreachable';
-      }
+    const rows = [];
+    for (let r4 = 1; r4 <= 100; r4++) {
+      const total = currentPP + p4Pts(r4);
+      const qualifies = total >= PLAYOFFS_TARGET;
+      const rankElo = eloByRank[r4] ?? 0;
+      const eloGap = r4 === currentRk ? 0 : rankElo > currentElo ? rankElo - currentElo : -(currentElo - rankElo);
+      // skip rows that can't qualify and aren't current rank (keep a few below for context)
+      if (!qualifies && r4 > currentRk + 5 && total < PLAYOFFS_TARGET - 20) continue;
+      rows.push({ r4, total, qualifies, eloGap, isCurrent: r4 === currentRk });
     }
-    const rankElo = eloByRank[r3] ?? 0;
-    const eloGap = r3 === currentP3Rank ? 0 : rankElo > currentElo ? rankElo - currentElo : -(currentElo - rankElo);
-    rows.push({ r3, ppAfterP3, worstP4, eloGap, isCurrent: r3 === currentP3Rank });
+
+    el.innerHTML = `
+      <div class="qual-path-label">playoffs path (target ${PLAYOFFS_TARGET} pts) — P4 · current rank highlighted${bestCase < PLAYOFFS_TARGET ? ' · cannot reach playoffs' : ''}</div>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border)">
+        <table class="qual-path-table" style="width:100%">
+          <thead style="position:sticky;top:0;background:var(--bg2)">
+            <tr><th>P4 elo rank</th><th>elo gap</th><th>total pts</th><th>playoffs</th></tr>
+          </thead>
+          <tbody>${rows.map(r => {
+            const gapStr = r.eloGap === 0 ? '—' : r.eloGap > 0 ? `+${r.eloGap}` : `${r.eloGap}`;
+            const gapColor = r.eloGap === 0 ? 'var(--accent)' : r.eloGap > 0 ? 'var(--muted)' : '#4ade80';
+            const qualStr = r.qualifies ? '✓' : '✗';
+            const qualColor = r.qualifies ? 'var(--accent)' : '#f87171';
+            return `
+            <tr class="${r.isCurrent ? 'current-row' : ''}" ${r.isCurrent ? 'id="qual-path-current"' : ''}>
+              <td>${r.isCurrent ? '→ ' : ''}${r.r4}</td>
+              <td style="color:${gapColor}">${gapStr}</td>
+              <td>${r.total}</td>
+              <td style="color:${qualColor}">${qualStr}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else {
+    // P3 mode (legacy): show P3 rank → pts after P3 → worst P4 rank needed
+    const p3Pts = currentPhasePoints;
+    const p4Pts = r => (r >= 1 && r <= 100) ? PP_TABLE[r-1][4] : 0;
+
+    const rows = [];
+    for (let r3 = 1; r3 <= 100; r3++) {
+      const ppAfterP3 = currentPP + p3Pts(r3);
+      const needed = PLAYOFFS_TARGET - ppAfterP3;
+      let worstP4;
+      if (needed <= 0) {
+        worstP4 = '✓ qualified';
+      } else {
+        worstP4 = null;
+        for (let r4 = 100; r4 >= 1; r4--) {
+          if (p4Pts(r4) >= needed) { worstP4 = `rank ${r4}`; break; }
+        }
+        if (!worstP4) {
+          if (r3 !== currentRk) continue;
+          worstP4 = 'unreachable';
+        }
+      }
+      const rankElo = eloByRank[r3] ?? 0;
+      const eloGap = r3 === currentRk ? 0 : rankElo > currentElo ? rankElo - currentElo : -(currentElo - rankElo);
+      rows.push({ r3, ppAfterP3, worstP4, eloGap, isCurrent: r3 === currentRk });
+    }
+
+    el.innerHTML = `
+      <div class="qual-path-label">playoffs path (target ~${PLAYOFFS_TARGET} pts) — current P3 rank highlighted</div>
+      <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border)">
+        <table class="qual-path-table" style="width:100%">
+          <thead style="position:sticky;top:0;background:var(--bg2)">
+            <tr><th>P3 elo rank</th><th>elo gap</th><th>pts after P3</th><th>worst P4 rank for playoffs</th></tr>
+          </thead>
+          <tbody id="qual-path-tbody">${rows.map(r => {
+            const gapStr = r.eloGap === 0 ? '—' : r.eloGap > 0 ? `+${r.eloGap}` : `${r.eloGap}`;
+            const gapColor = r.eloGap === 0 ? 'var(--accent)' : r.eloGap > 0 ? 'var(--muted)' : '#4ade80';
+            return `
+            <tr class="${r.isCurrent ? 'current-row' : ''}" ${r.isCurrent ? 'id="qual-path-current"' : ''}>
+              <td>${r.isCurrent ? '→ ' : ''}${r.r3}</td>
+              <td style="color:${gapColor}">${gapStr}</td>
+              <td>${r.ppAfterP3}</td>
+              <td>${r.worstP4}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>`;
   }
 
-  el.innerHTML = `
-    <div class="qual-path-label">playoffs path (target ~${PLAYOFFS_TARGET} pts) — your current P3 rank highlighted</div>
-    <div style="max-height:220px;overflow-y:auto;border:1px solid var(--border)">
-      <table class="qual-path-table" style="width:100%">
-        <thead style="position:sticky;top:0;background:var(--bg2)">
-          <tr><th>P3 elo rank</th><th>elo gap</th><th>pts after P3</th><th>worst P4 rank for playoffs</th></tr>
-        </thead>
-        <tbody id="qual-path-tbody">${rows.map(r => {
-          const gapStr = r.eloGap === 0 ? '—' : r.eloGap > 0 ? `+${r.eloGap}` : `${r.eloGap}`;
-          const gapColor = r.eloGap === 0 ? 'var(--accent)' : r.eloGap > 0 ? 'var(--muted)' : '#4ade80';
-          return `
-          <tr class="${r.isCurrent ? 'current-row' : ''}" ${r.isCurrent ? 'id="qual-path-current"' : ''}>
-            <td>${r.isCurrent ? '→ ' : ''}${r.r3}</td>
-            <td style="color:${gapColor}">${gapStr}</td>
-            <td>${r.ppAfterP3}</td>
-            <td>${r.worstP4}</td>
-          </tr>`;
-        }).join('')}
-        </tbody>
-      </table>
-    </div>`;
   el.classList.add('visible');
-
   setTimeout(() => {
     const cur = document.getElementById('qual-path-current');
     if (cur) cur.scrollIntoView({ block: 'center', behavior: 'smooth' });
