@@ -354,18 +354,7 @@
             <th data-col="eloRank" class="num">elo rank<span class="sort-icon">↕</span></th>
             <th class="no-sort">to qualify</th>
             <th data-col="lastPlayed" class="num">last played<span class="sort-icon">↕</span></th>
-            <th data-col="winRate"        class="num extra-col" style="display:none" data-ekey="winRate">win rate<br><span class="col-mode-toggle" data-key="winRate">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="wins"           class="num extra-col" style="display:none" data-ekey="wins">wins<br><span class="col-mode-toggle" data-key="wins">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="losses"         class="num extra-col" style="display:none" data-ekey="losses">losses<br><span class="col-mode-toggle" data-key="losses">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="played"         class="num extra-col" style="display:none" data-ekey="played">played<br><span class="col-mode-toggle" data-key="played">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="completions"    class="num extra-col" style="display:none" data-ekey="completions">completions<br><span class="col-mode-toggle" data-key="completions">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="completionRate" class="num extra-col" style="display:none" data-ekey="completionRate">comp rate<br><span class="col-mode-toggle" data-key="completionRate">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="forfeitRate"    class="num extra-col" style="display:none" data-ekey="forfeitRate">forfeit rate<br><span class="col-mode-toggle" data-key="forfeitRate">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="forfeits"       class="num extra-col" style="display:none" data-ekey="forfeits">forfeits<br><span class="col-mode-toggle" data-key="forfeits">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="bestTime"       class="num extra-col" style="display:none" data-ekey="bestTime">best time<br><span class="col-mode-toggle" data-key="bestTime">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="avgTime"        class="num extra-col" style="display:none" data-ekey="avgTime">avg time<br><span class="col-mode-toggle" data-key="avgTime">S10</span><span class="sort-icon">↕</span></th>
-            <th data-col="winStreak"      class="num extra-col" style="display:none">streak<span class="sort-icon">↕</span></th>
-            <th data-col="highestStreak"  class="num extra-col" style="display:none" data-ekey="highestStreak">best streak<br><span class="col-mode-toggle" data-key="highestStreak">S10</span><span class="sort-icon">↕</span></th>
+            <th data-col="helmHue" class="num" id="helm-hue-th" title="sort by average helm color" style="cursor:pointer">🌈<span class="sort-icon">↕</span></th>
           </tr>
         </thead>
         <tbody id="main-tbody"></tbody>
@@ -544,6 +533,22 @@ let extraStatsOn   = false;
 let extraStatsCache = {};
 let extraStatsFetching = false;
 let extraColMode = {}; // key → 'season' | 'total'
+
+const EXTRA_COLS = [
+  { key: 'winRate',        label: 'win rate',     fmt: v => v.toFixed(1)+'%', hasToggle: true },
+  { key: 'wins',           label: 'wins',          fmt: null,                  hasToggle: true },
+  { key: 'losses',         label: 'losses',        fmt: null,                  hasToggle: true },
+  { key: 'played',         label: 'played',        fmt: null,                  hasToggle: true },
+  { key: 'completions',    label: 'completions',   fmt: null,                  hasToggle: true },
+  { key: 'completionRate', label: 'comp rate',     fmt: v => v.toFixed(1)+'%', hasToggle: true },
+  { key: 'forfeitRate',    label: 'forfeit rate',  fmt: v => v.toFixed(1)+'%', hasToggle: true },
+  { key: 'forfeits',       label: 'forfeits',      fmt: null,                  hasToggle: true },
+  { key: 'bestTime',       label: 'best time',     fmt: v => fmtTime(v),       hasToggle: true },
+  { key: 'avgTime',        label: 'avg time',      fmt: v => fmtTime(v),       hasToggle: true },
+  { key: 'winStreak',      label: 'streak',        fmt: null,                  hasToggle: false },
+  { key: 'highestStreak',  label: 'best streak',   fmt: null,                  hasToggle: true },
+];
+let extraColOrder = EXTRA_COLS.map(c => c.key);
 
 let prevEloSnapshot  = {};  // uuid → eloRate, for detecting games every 60s
 let lastPlayedMemory = {};  // uuid → unix timestamp (best known value)
@@ -901,11 +906,73 @@ document.getElementById('extra-stats-btn').addEventListener('click', () => {
   document.getElementById('extra-mode-all-btn').style.display = extraStatsOn ? '' : 'none';
   document.querySelector('main').style.maxWidth = extraStatsOn ? '100%' : '';
   document.querySelector('.header-inner').style.maxWidth = extraStatsOn ? '100%' : '';
+  renderExtraHeaders();
   if (extraStatsOn && !extraStatsFetching && Object.keys(extraStatsCache).length < mergedData.length) {
     fetchExtraStats();
   }
   renderTable();
 });
+
+function renderExtraHeaders() {
+  const thead = document.querySelector('#main-table thead tr');
+  // Remove existing extra-col headers
+  thead.querySelectorAll('th.extra-col').forEach(th => th.remove());
+
+  let dragSrcKey = null;
+
+  extraColOrder.forEach(key => {
+    const col = EXTRA_COLS.find(c => c.key === key);
+    if (!col) return;
+    const mode = extraColMode[key] ?? 'season';
+    const isTotal = mode === 'total';
+    const th = document.createElement('th');
+    th.dataset.col = key;
+    th.className = 'num extra-col';
+    th.style.display = extraStatsOn ? '' : 'none';
+    th.draggable = true;
+    th.style.cursor = 'grab';
+    th.innerHTML = `${col.label}${col.hasToggle ? `<br><span class="col-mode-toggle${isTotal?' total':''}" data-key="${key}">${isTotal?'all':'S10'}</span>` : ''}<span class="sort-icon">↕</span>`;
+
+    // Drag events
+    th.addEventListener('dragstart', e => {
+      dragSrcKey = key;
+      th.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    th.addEventListener('dragend', () => { th.style.opacity = ''; });
+    th.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; th.style.background = 'var(--bg3)'; });
+    th.addEventListener('dragleave', () => { th.style.background = ''; });
+    th.addEventListener('drop', e => {
+      e.preventDefault();
+      th.style.background = '';
+      if (dragSrcKey && dragSrcKey !== key) {
+        const fromIdx = extraColOrder.indexOf(dragSrcKey);
+        const toIdx   = extraColOrder.indexOf(key);
+        extraColOrder.splice(fromIdx, 1);
+        extraColOrder.splice(toIdx, 0, dragSrcKey);
+        renderExtraHeaders();
+        renderTable();
+      }
+    });
+
+    // Sort click (not on toggle)
+    th.addEventListener('click', e => {
+      if (e.target.closest('.col-mode-toggle')) return;
+      const prevSort = { ...sortState };
+      if (sortState.col === key) sortState.asc = !sortState.asc;
+      else {
+        sortState.col = key;
+        sortState.asc = key === 'bestTime' || key === 'avgTime' || key === 'losses' || key === 'forfeitRate' || key === 'forfeits';
+      }
+      renderExtraHeaders();
+      renderTable();
+    });
+
+    thead.appendChild(th);
+  });
+
+  // Re-attach toggle click via delegation (already handled by main-table listener)
+}
 
 function getExtraVal(uuid, key) {
   const s = extraStatsCache[uuid];
@@ -1021,18 +1088,10 @@ function renderTable() {
       <td class="num"><span class="mono" style="color:var(--muted);font-size:12px">${u.eloRk ?? '—'}</span></td>
       <td>${qualPill(u.qualData)}</td>
       <td class="num"><span class="mono last-played-cell" style="font-size:11px;color:var(--muted)">${fmtAgo(u.lastPlayed)}</span></td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'winRate', v => v.toFixed(1)+'%')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'wins')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'losses')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'played')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'completions')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'completionRate', v => v.toFixed(1)+'%')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'forfeitRate', v => v.toFixed(1)+'%')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'forfeits')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'bestTime', v => fmtTime(v))}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'avgTime', v => fmtTime(v))}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'winStreak')}</td>
-      <td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid,'highestStreak')}</td>
+      ${extraColOrder.map(key => {
+        const col = EXTRA_COLS.find(c => c.key === key);
+        return `<td class="num extra-col" style="display:${extraStatsOn?'':'none'}">${extraStatCell(u.uuid, key, col?.fmt || null)}</td>`;
+      }).join('')}
     </tr>`;
 
     if (naturalOrder) {
@@ -1088,12 +1147,10 @@ document.getElementById('main-table').addEventListener('click', e => {
   e.stopPropagation();
   e.preventDefault();
   const key = toggle.dataset.key;
-  const prevSort = { ...sortState }; // save sort state
+  const prevSort = { ...sortState };
   extraColMode[key] = extraColMode[key] === 'total' ? 'season' : 'total';
-  sortState = prevSort; // restore sort state
-  const isTotal = extraColMode[key] === 'total';
-  toggle.textContent = isTotal ? 'all' : 'S10';
-  toggle.classList.toggle('total', isTotal);
+  sortState = prevSort;
+  renderExtraHeaders();
   renderTable();
 });
 
@@ -1105,11 +1162,7 @@ document.getElementById('extra-mode-all-btn').addEventListener('click', () => {
   const keys = ['winRate','wins','losses','played','completions','completionRate','forfeitRate','forfeits','bestTime','avgTime','highestStreak'];
   keys.forEach(k => extraColMode[k] = targetMode);
   btn.textContent = targetMode === 'total' ? 'all → S10' : 'S10 → all';
-  document.querySelectorAll('.col-mode-toggle').forEach(t => {
-    const isTotal = extraColMode[t.dataset.key] === 'total';
-    t.textContent = isTotal ? 'all' : 'S10';
-    t.classList.toggle('total', isTotal);
-  });
+  renderExtraHeaders();
   renderTable();
 });
 
